@@ -6,7 +6,7 @@ DEBUG ?= 1
 BUILD_DIR = build
 
 # Compilers flags
-FLAGS = -Wall -Werror
+FLAGS = -Wall -Werror -Wno-\#warnings
 
 ifneq (,$(findstring clang,$(CXX)))
 FLAGS += -Wno-unused-command-line-argument -fcolor-diagnostics -fansi-escape-codes
@@ -35,6 +35,7 @@ CXXFLAGS = -std=c++23 -MMD -MP $(FLAGS) $(INCLUDES)
 
 ## === SOURCE CDOE ===
 CXX_SRCS = ./cmd/main.cpp \
+	   ./cmd/bc_wrapper.cpp \
 	   ./cmd/cmp_tests.cpp \
 	   ./cmd/math_tests.cpp
 

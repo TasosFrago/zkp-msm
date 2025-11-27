@@ -163,7 +163,9 @@ public:
 	{
 		chunks = 0;
 		std::vector<bool> bitArray;
-		m_is_negative = false;
+
+		m_is_negative = (a[0] == '-');
+		if(m_is_negative) a.erase(0, 1);
 
 		if(false) {
 
@@ -184,7 +186,7 @@ public:
 		for(size_t i = 0; i < bitArray.size(); i += bits) {
 			T chunkValue = 0;
 
-			for(int b = 0; b < bits; b++) {
+			for(size_t b = 0; b < bits; b++) {
 				if((i + b < bitArray.size()) && (bitArray[i + b])) {
 					chunkValue |= (static_cast<T>(1) << b);
 				}
