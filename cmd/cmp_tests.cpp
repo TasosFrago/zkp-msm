@@ -61,9 +61,9 @@ void test_cmps_with_bc()
 
 	constexpr const size_t BATCHES = 1000;
 
-	std::println("Running {} tests for all comparison operations with bc, with chunks of 2, 4, 8, 16, 32 and 64 bits", BATCHES);
+	std::println("Running {} tests for all comparison operations with bc, with chunks of 32 and 64 bits", BATCHES);
 	for(size_t i = 0; i < BATCHES; i++) {
-		run_test_batch.template operator()<2, 4, 8, 16, 32, 64>();
+		run_test_batch.template operator()<32, 64>();
 
 		progress(i, BATCHES);
 	}

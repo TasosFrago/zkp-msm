@@ -62,6 +62,46 @@ bga::BigInt<Bits> run_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigInt<B
 #endif
 }
 
+template <size_t Bits>
+bga::BigInt<Bits> shift_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigInt<Bits> b)
+{
+#ifdef __linux__
+	std::string A = std::format("{}", a);
+	std::string B = std::format("(2^{})", b);
+	std::string res_str = BcExec::instance().calculate(A, op, B);
+	return bga::BigInt<Bits>(res_str);
+#else
+	return bga::BigInt<Bits>();
+#endif
+}
+
+template <size_t Bits>
+bga::BigInt<Bits> run_mod_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigInt<Bits> b, bga::BigInt<Bits> m)
+{
+#ifdef __linux__
+	std::string A = std::format("{}", a);
+	std::string B = std::format("{}", b);
+	std::string M = std::format("{}", m);
+
+	// Logic: ((A op B) % M + M) % M
+	// This ensures that even if (A - B) is negative, the result is positive.
+	// std::string command = std::format("scale=0; res = ({} {} {}); ((res % {}) + {}) % {}", A, op, B, M, M, M);
+
+	// std::string res_str = BcExec::instance().calculate_raw(command); // Assuming BcExec can take raw strings, or adapt calculate
+	// If your BcExec::calculate only takes (A, op, B), you might need to construct the full expression in A or use a raw method.
+	// Here is a compliant version using your existing calculate pattern by injecting the logic:
+
+	// We construct a complex expression string to pass to bc
+	// "((A op B) % M + M) % M"
+	std::string expr = std::format("(({0} {1} {2}) % {3} + {3})", A, op, B, M);
+	std::string res = BcExec::instance().calculate(expr, "%", M);
+
+	return bga::BigInt<Bits>(res);
+#else
+	return bga::BigInt<Bits>();
+#endif
+}
+
 /*
 template <size_t Bits>
 bga::BigInt<Bits> run_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigInt<Bits> b)
@@ -97,5 +137,9 @@ std::function<std::string()> genRandBgN(size_t digits = 10);
 
 void test_cmps();
 void test_cmps_with_bc();
+
 void test_operations();
 void test_operations_with_bc();
+
+void test_mod();
+void test_mod_with_bc();

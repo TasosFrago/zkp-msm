@@ -4,6 +4,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <print>
 #include <string>
 #include <vector>
@@ -116,6 +117,8 @@ private:
 	size_t bits;
 	bool m_is_negative;
 
+	std::string decimal_repr;
+
 	static int devideStrBy2(std::string &num)
 	{
 		int remainder = 0;
@@ -159,7 +162,7 @@ public:
 		} while(value != 0);
 	}
 
-	BigInt(std::string a) : bits(Bits)
+	BigInt(std::string a) : bits(Bits), decimal_repr(a)
 	{
 		chunks = 0;
 		std::vector<bool> bitArray;
@@ -203,9 +206,46 @@ public:
 		chunks++;
 		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
+
+	using iterator = std::vector<T>::iterator;
+	using const_iterator = std::vector<T>::const_iterator;
+	iterator begin()
+	{
+		return radix.begin();
+	}
+	iterator end()
+	{
+		return radix.end();
+	}
+
+	template <typename InputIt>
+	iterator insert(const_iterator pos, InputIt first, InputIt last)
+	{
+		auto res = radix.insert(pos, first, last);
+		chunks = radix.size();
+		return res;
+	}
+
 	void push_bits(T num, size_t idx)
 	{
 		radix[idx] = num;
+	}
+
+	void reserve(size_t n)
+	{
+		radix.reserve(n);
+	}
+
+	void resize(size_t n, size_t num)
+	{
+		radix.resize(n, num);
+		chunks += n;
+		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+	}
+
+	std::vector<T> &get()
+	{
+		return radix;
 	}
 
 	std::vector<T> get() const
@@ -356,6 +396,44 @@ private:
 			    CHUNKS_MSB };
 	Format format_spec = Format::DECIMAL;
 
+	struct PowerOf10 {
+		static constexpr T value = []() {
+			if constexpr(sizeof(T) >= 8)
+				return 10000000000000000000ULL;
+			else if constexpr(sizeof(T) >= 4)
+				return 1000000000UL;
+			else if constexpr(sizeof(T) >= 2)
+				return 10000U;
+			else
+				return 100U;
+		}();
+
+		static constexpr int digits = []() {
+			if constexpr(sizeof(T) >= 8)
+				return 19;
+			else if constexpr(sizeof(T) >= 4)
+				return 9;
+			else if constexpr(sizeof(T) >= 2)
+				return 4;
+			else
+				return 2;
+		}();
+	};
+
+	static T divideVecByBase(std::vector<T> &num, size_t bits, T divisor)
+	{
+		T_double remainder = 0;
+
+		for(auto it = num.rbegin(); it != num.rend(); ++it) {
+			T_double val = (remainder << bits) | (*it);
+
+			*it = static_cast<T>(val / divisor);
+			remainder = val % divisor;
+		}
+
+		return static_cast<T>(remainder);
+	}
+
 	// Helper: Divides a radix vector by 10, returns remainder (0-9)
 	static T divideVecBy10(std::vector<T> &num, size_t bits)
 	{
@@ -434,16 +512,59 @@ public:
 		// --- Decimal Logic ---
 		case Format::DECIMAL: {
 			std::vector<T> tempRadix = num_radix;
-			std::string decStr = "";
+
+			// size_t max_digits = (num_radix.size() * chunk_bits * 30103) / 100000 + 2;
+
+			// std::string result;
+			// result.reserve(max_digits);
+
+			std::vector<T> parts;
+			parts.reserve(num_radix.size());
 
 			while(!isVecZero(tempRadix)) {
-				T remainder = divideVecBy10(tempRadix, chunk_bits);
-				decStr += (remainder + '0');
-			}
-			if(is_negative) decStr += "-";
+				// T part = divideVecByBase(tempRadix, chunk_bits, PowerOf10::value);
+				parts.push_back(divideVecByBase(tempRadix, chunk_bits, PowerOf10::value));
 
-			std::reverse(decStr.begin(), decStr.end());
-			return std::format_to(out, "{}", decStr);
+				// char buff[PowerOf10::digits];
+				// for(int i = PowerOf10::digits - 1; i >= 0; --i) {
+				// 	buff[i] = '0' + (part % 10);
+				// 	part /= 10;
+				// }
+				// result.append(buff, PowerOf10::digits);
+			}
+
+			// size_t first_nonzero = result.find_first_not_of('0');
+			// if(first_nonzero != std::string::npos) {
+			// 	result.erase(0, first_nonzero);
+			// } else {
+			// 	result = "0";
+			// }
+
+			if(is_negative) {
+				// result.insert(0, "-");
+				out = std::format_to(out, "-");
+			}
+
+			auto it = parts.rbegin();
+			out = std::format_to(out, "{}", *it);
+			++it;
+
+			std::string fmt_str = "{:0" + std::to_string(PowerOf10::digits) + "}";
+
+			for(; it != parts.rend(); ++it) {
+				T val = *it;
+				char buff[PowerOf10::digits + 1];
+				for(int i = PowerOf10::digits - 1; i >= 0; --i) {
+					buff[i] = '0' + (val % 10);
+					val /= 10;
+				}
+				buff[PowerOf10::digits] = '\0';
+				out = std::format_to(out, "{}", buff);
+				// out = std::vformat_to(out, std::string_view(fmt_str), std::make_format_args(*it));
+			}
+			// std::reverse(result.begin() + (is_negative ? 1 : 0), result.end());
+			// return std::format_to(out, "{}", result);
+			return out;
 		}
 
 		// --- Binary Logic ---
