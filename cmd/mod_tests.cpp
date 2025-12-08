@@ -17,6 +17,7 @@ void test_mod()
 
 		uint64_t mod_val = dist(gen);
 		if(mod_val == 0) mod_val = 1;
+		mod_val |= 1;
 
 		__int128_t A = dist(gen) % mod_val;
 		__int128_t B = dist(gen) % mod_val;
@@ -39,9 +40,19 @@ void test_mod()
 
 		// Modular Multiplication
 		// C++ Check: (A * B) % M
-		// test_assert(BigInt<N>((A * B) % M),
-		// 	    mda::mul(a, b, m),
-		// 	    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
+		if constexpr(N > 16) {
+			constexpr mda::MONT_ALGO sos = mda::MONT_ALGO::SOS;
+
+			test_assert(BigInt<N>((A * B) % M),
+				    (mda::mul<N, sos>(a, b, m)),
+				    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
+
+			constexpr mda::MONT_ALGO cios = mda::MONT_ALGO::CIOS;
+
+			test_assert(BigInt<N>((A * B) % M),
+				    (mda::mul<N, cios>(a, b, m)),
+				    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
+		}
 	};
 
 	auto run_test_batch = [&]<size_t... Ns>() {
@@ -69,6 +80,13 @@ void test_mod_with_bc()
 		using bga::BigInt;
 
 		std::string M_str = gen_mod();
+
+		if(!M_str.empty()) {
+			M_str.back() |= 1;
+		} else {
+			M_str = "1";
+		}
+
 		std::string A_str = gen_op();
 		std::string B_str = gen_op();
 
@@ -87,16 +105,22 @@ void test_mod_with_bc()
 			    "Mod Sub: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
 
 		// (A * B) % M
-		// test_assert(run_mod_bc(a, "*", b, m),
-		// 	    mda::mul(a, b, m),
-		// 	    "Mod Mul: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
+		constexpr mda::MONT_ALGO sos = mda::MONT_ALGO::SOS;
+		test_assert(run_mod_bc(a, "*", b, m),
+			    (mda::mul<N, sos>(a, b, m)),
+			    "Mod Mul: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
+
+		constexpr mda::MONT_ALGO cios = mda::MONT_ALGO::CIOS;
+		test_assert(run_mod_bc(a, "*", b, m),
+			    (mda::mul<N, cios>(a, b, m)),
+			    "Mod Mul: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
 	};
 
 	auto run_test_batch = [&]<size_t... Ns>() {
 		(run_test.template operator()<Ns>(), ...);
 	};
 
-	constexpr const size_t BATCHES = 200;
+	constexpr const size_t BATCHES = 500;
 
 	std::println("Running {} tests for MODULAR operations with BC, chunks 32, 64", BATCHES);
 	for(size_t i = 0; i < BATCHES; i++) {

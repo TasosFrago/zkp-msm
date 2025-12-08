@@ -26,7 +26,7 @@ std::function<std::string()> genRandBgN(size_t digits)
 		} while(first == 0);
 		bgn.push_back('0' + first);
 
-		for(size_t i = 0; i < digits; i++) {
+		for(size_t i = 0; i < digits - 1; i++) {
 			int nextDigit = digitDist(gen);
 			bgn.push_back('0' + nextDigit);
 		}

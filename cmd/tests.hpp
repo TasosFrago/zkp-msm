@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <functional>
 #include <string>
 
@@ -83,16 +84,6 @@ bga::BigInt<Bits> run_mod_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigI
 	std::string B = std::format("{}", b);
 	std::string M = std::format("{}", m);
 
-	// Logic: ((A op B) % M + M) % M
-	// This ensures that even if (A - B) is negative, the result is positive.
-	// std::string command = std::format("scale=0; res = ({} {} {}); ((res % {}) + {}) % {}", A, op, B, M, M, M);
-
-	// std::string res_str = BcExec::instance().calculate_raw(command); // Assuming BcExec can take raw strings, or adapt calculate
-	// If your BcExec::calculate only takes (A, op, B), you might need to construct the full expression in A or use a raw method.
-	// Here is a compliant version using your existing calculate pattern by injecting the logic:
-
-	// We construct a complex expression string to pass to bc
-	// "((A op B) % M + M) % M"
 	std::string expr = std::format("(({0} {1} {2}) % {3} + {3})", A, op, B, M);
 	std::string res = BcExec::instance().calculate(expr, "%", M);
 
@@ -102,36 +93,47 @@ bga::BigInt<Bits> run_mod_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigI
 #endif
 }
 
-/*
-template <size_t Bits>
-bga::BigInt<Bits> run_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigInt<Bits> b)
+template <typename Func, typename... Args>
+auto time_it(Func &&func, Args &&...args)
 {
-#ifdef __linux__
-	std::string cmd = std::format("echo \"{} {} {}\" | BC_LINE_LENGTH=0 bc", a, op, b);
+	using ReturnType = decltype(std::invoke(std::forward<Func>(func),
+						std::forward<Args>(args)...));
 
-	auto pipe_del = [](FILE *f) {
-		if(f) pclose(f);
-	};
-	std::unique_ptr<FILE, decltype(pipe_del)> pipe{ popen(cmd.c_str(), "r"), pipe_del };
-	assert(pipe && "pipe NULL");
+	auto start = std::chrono::high_resolution_clock::now();
 
-	std::array<char, 128> buf;
-	std::string result;
-	while(fgets(buf.data(), buf.size(), pipe.get()) != nullptr) {
-		result += buf.data();
+	if constexpr(std::is_void_v<ReturnType>) {
+		std::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+		auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(duration);
+		return std::make_pair(std::monostate{}, seconds);
+	} else {
+		ReturnType result = std::invoke(std::forward<Func>(func),
+						std::forward<Args>(args)...);
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+		auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(duration);
+		return std::make_pair(std::move(result), seconds);
 	}
+	// std::chrono::duration<double> total_duration;
+	// for(int i = 0; i < 20; i++) {
+	// 	auto [_, duration] = time_it([a]() {
+	// 		std::println("control: {}", bga::add(a, bga::BigInt<64>("1")));
+	// 	});
+	// 	total_duration += duration;
+	// }
+	// std::println("Control duration: {}s", total_duration.count());
 
-	if(!result.empty() && result.back() == '\n') {
-		result.pop_back();
-	}
-
-	return bga::BigInt<Bits>(result);
-#else
-#warning "WARNING: Can't run the bc test outside of linux"
-#endif
-	return bga::BigInt<Bits>(); // return zero
+	// bga::BigInt<64> test = bga::lshift(a, 3510950764);
+	// std::println("Hello");
+	//
+	// {
+	// 	auto [_, duration2] = time_it([test]() {
+	// 		std::println("shift: {}", test);
+	// 	});
+	// 	std::println("shift duration: {}s", duration2.count());
+	// }
 }
-*/
 
 std::function<std::string()> genRandBgN(size_t digits = 10);
 

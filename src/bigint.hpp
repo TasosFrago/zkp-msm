@@ -4,7 +4,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
+#include <limits>
 #include <print>
 #include <string>
 #include <vector>
@@ -12,38 +12,38 @@
 #ifndef NDEBUG
 #include <source_location>
 
-#define assertm(expr, msg, ...)                                                                       \
-	do {                                                                                          \
-		if(!(expr)) {                                                                         \
+#define assertm(expr, msg, ...)                                                           \
+	do {                                                                                  \
+		if(!(expr)) {                                                                     \
 			const auto loc = std::source_location::current();                             \
 			std::println(stderr, "Assertion failed: {}:{}", loc.file_name(), loc.line()); \
 			std::println(stderr, msg __VA_OPT__(, ) __VA_ARGS__);                         \
 			std::abort();                                                                 \
-		}                                                                                     \
+		}                                                                                 \
 	} while(0)
 #else
-#define assertm(expr, msg, ...)     \
+#define assertm(expr, msg, ...) \
 	do {                        \
-		(void)sizeof(expr); \
+		(void)sizeof(expr);     \
 	} while(0)
 #endif
 
 namespace bga
 {
 
-#define SelectIntType(name, type8, type16, type32, type64)                              \
-	template <size_t Bits>                                                          \
-	constexpr auto name()                                                           \
-	{                                                                               \
+#define SelectIntType(name, type8, type16, type32, type64)                      \
+	template <size_t Bits>                                                      \
+	constexpr auto name()                                                       \
+	{                                                                           \
 		static_assert(Bits > 0 && Bits <= 64, "Bits musth be between [1, 64]"); \
 		if constexpr(Bits <= 8) {                                               \
-			return type8{};                                                 \
+			return type8{};                                                     \
 		} else if constexpr(Bits <= 16) {                                       \
-			return type16{};                                                \
+			return type16{};                                                    \
 		} else if constexpr(Bits <= 32) {                                       \
-			return type32{};                                                \
+			return type32{};                                                    \
 		} else {                                                                \
-			return type64{};                                                \
+			return type64{};                                                    \
 		}                                                                       \
 	}
 
@@ -92,11 +92,11 @@ template <size_t Bits>
 void debug_loop()
 {
 	std::println("Bits: {:02}\tu: {},\tud: {},\ti: {:11},\tid: {}",
-		     Bits,
-		     type_name<typename SelectIntType_t<Bits>::uint_t>(),
-		     type_name<typename SelectIntType_t<Bits>::uintd_t>(),
-		     type_name<typename SelectIntType_t<Bits>::int_t>(),
-		     type_name<typename SelectIntType_t<Bits>::intd_t>());
+				 Bits,
+				 type_name<typename SelectIntType_t<Bits>::uint_t>(),
+				 type_name<typename SelectIntType_t<Bits>::uintd_t>(),
+				 type_name<typename SelectIntType_t<Bits>::int_t>(),
+				 type_name<typename SelectIntType_t<Bits>::intd_t>());
 
 	if constexpr(Bits < 64) {
 		debug_loop<Bits * 2>();
@@ -236,6 +236,13 @@ public:
 		radix.reserve(n);
 	}
 
+	void resize(size_t n)
+	{
+		radix.resize(n);
+		chunks = radix.size();
+		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+	}
+
 	void resize(size_t n, size_t num)
 	{
 		radix.resize(n, num);
@@ -348,6 +355,16 @@ public:
 		return m_is_negative ? (0 <=> res) : res;
 	}
 
+	void printme()
+	{
+		std::println("{}", (*this));
+	}
+
+	std::string str()
+	{
+		return std::format("{}", (*this));
+	}
+
 	void print_all()
 	{
 		std::println("Dec:\t{}", (*this));
@@ -366,6 +383,9 @@ public:
 		std::println("\tLSB:\t{:lsb}", (*this));
 	}
 };
+
+template <size_t Bits>
+using bgint = BigInt<Bits>;
 
 template <size_t Bits>
 void pad_BigInts(BigInt<Bits> &a, BigInt<Bits> &b)
@@ -390,34 +410,26 @@ private:
 	using T_double = typename bga::SelectIntType_t<Bits>::uintd_t;
 
 	enum class Format { DECIMAL,
-			    BINARY,
-			    HEX,
-			    CHUNKS_LSB,
-			    CHUNKS_MSB };
+						BINARY,
+						HEX,
+						CHUNKS_LSB,
+						CHUNKS_MSB };
 	Format format_spec = Format::DECIMAL;
 
 	struct PowerOf10 {
-		static constexpr T value = []() {
-			if constexpr(sizeof(T) >= 8)
-				return 10000000000000000000ULL;
-			else if constexpr(sizeof(T) >= 4)
-				return 1000000000UL;
-			else if constexpr(sizeof(T) >= 2)
-				return 10000U;
-			else
-				return 100U;
-		}();
+		static constexpr auto data = []() consteval {
+			T val = 1;
+			int digits = 0;
+			T max = std::numeric_limits<T>::max();
 
-		static constexpr int digits = []() {
-			if constexpr(sizeof(T) >= 8)
-				return 19;
-			else if constexpr(sizeof(T) >= 4)
-				return 9;
-			else if constexpr(sizeof(T) >= 2)
-				return 4;
-			else
-				return 2;
+			while(val <= max / 10) {
+				val *= 10;
+				digits++;
+			}
+			return std::pair{ val, digits };
 		}();
+		static constexpr T value = data.first;
+		static constexpr T digits = data.second;
 	};
 
 	static T divideVecByBase(std::vector<T> &num, size_t bits, T divisor)

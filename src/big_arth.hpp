@@ -82,6 +82,11 @@ BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b)
 
 	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
+	if(a == BigInt<Bits>(1))
+		return b;
+	else if(b == BigInt<Bits>(1))
+		return a;
+
 	BigInt<Bits> W;
 	W.reserve(a.get_chunks() + b.get_chunks() + 1);
 	W.resize(a.get_chunks() + b.get_chunks(), 0);
