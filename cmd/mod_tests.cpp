@@ -27,32 +27,43 @@ void test_mod()
 
 		// Modular Addition
 		// C++ Check: (A + B) % M
-		test_assert(BigInt<N>((A + B) % M),
+		test_assert("mod addition",
+			    BigInt<N>((A + B) % M),
 			    mda::add(a, b, m),
 			    "Mod Add: a: {}, b: {}, m: {}", A, B, M);
 
 		// Modular Subtraction
 		// C++ Check: ((A - B) % M + M) % M (Euclidean Modulo)
 		__int128_t sub_expected = ((A - B) % M + M) % M;
-		test_assert(BigInt<N>(sub_expected),
+		test_assert("mod subtraction",
+			    BigInt<N>(sub_expected),
 			    mda::sub(a, b, m),
 			    "Mod Sub: a: {}, b: {}, m: {}", A, B, M);
 
 		// Modular Multiplication
 		// C++ Check: (A * B) % M
-		if constexpr(N > 16) {
+		if constexpr(N > 8) {
 			constexpr mda::MONT_ALGO sos = mda::MONT_ALGO::SOS;
 
-			test_assert(BigInt<N>((A * B) % M),
+			test_assert("mod multiplication SOS",
+				    BigInt<N>((A * B) % M),
 				    (mda::mul<N, sos>(a, b, m)),
 				    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
-
-			constexpr mda::MONT_ALGO cios = mda::MONT_ALGO::CIOS;
-
-			test_assert(BigInt<N>((A * B) % M),
-				    (mda::mul<N, cios>(a, b, m)),
-				    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
 		}
+
+		constexpr mda::MONT_ALGO cios = mda::MONT_ALGO::CIOS;
+
+		test_assert("mod multiplication CIOS",
+			    BigInt<N>((A * B) % M),
+			    (mda::mul<N, cios>(a, b, m)),
+			    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
+
+		constexpr mda::MONT_ALGO fios = mda::MONT_ALGO::FIOS;
+
+		test_assert("mod multiplication FIOS",
+			    BigInt<N>((A * B) % M),
+			    (mda::mul<N, fios>(a, b, m)),
+			    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
 	};
 
 	auto run_test_batch = [&]<size_t... Ns>() {
@@ -61,9 +72,10 @@ void test_mod()
 
 	constexpr const size_t BATCHES = 1000;
 
-	std::println("Running {} tests for MODULAR operations, with chunks of 2, 4, 8, 16, 32 and 64 bits", BATCHES);
+	std::println("Running {} tests for all math operations, with chunks of {} bits", BATCHES, STR(BITS_TEST_MOD___N));
 	for(size_t i = 0; i < BATCHES; i++) {
-		run_test_batch.template operator()<2, 4, 8, 16, 32, 64>();
+		// run_test_batch.template operator()<2, 4, 8, 16, 32, 64>();
+		run_test_batch.template operator()<BITS_TEST_MOD___N>();
 		progress(i, BATCHES);
 	}
 	std::println("PASSED ALL MOD TESTS{}", std::string(12, ' '));
@@ -95,24 +107,34 @@ void test_mod_with_bc()
 		BigInt<N> b(B_str);
 
 		// (A + B) % M
-		test_assert(run_mod_bc(a, "+", b, m),
+		test_assert("mod bc addition",
+			    run_mod_bc(a, "+", b, m),
 			    mda::add(a, b, m),
 			    "Mod Add: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
 
 		// (A - B) % M
-		test_assert(run_mod_bc(a, "-", b, m),
+		test_assert("mod bc subtraction",
+			    run_mod_bc(a, "-", b, m),
 			    mda::sub(a, b, m),
 			    "Mod Sub: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
 
 		// (A * B) % M
 		constexpr mda::MONT_ALGO sos = mda::MONT_ALGO::SOS;
-		test_assert(run_mod_bc(a, "*", b, m),
+		test_assert("mod bc multiplication SOS",
+			    run_mod_bc(a, "*", b, m),
 			    (mda::mul<N, sos>(a, b, m)),
 			    "Mod Mul: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
 
 		constexpr mda::MONT_ALGO cios = mda::MONT_ALGO::CIOS;
-		test_assert(run_mod_bc(a, "*", b, m),
+		test_assert("mod bc multiplication CIOS",
+			    run_mod_bc(a, "*", b, m),
 			    (mda::mul<N, cios>(a, b, m)),
+			    "Mod Mul: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
+
+		constexpr mda::MONT_ALGO fios = mda::MONT_ALGO::FIOS;
+		test_assert("mod bc multiplication FIOS",
+			    run_mod_bc(a, "*", b, m),
+			    (mda::mul<N, fios>(a, b, m)),
 			    "Mod Mul: \na: {}\nb: {}\nm: {}", A_str, B_str, M_str);
 	};
 
@@ -122,9 +144,10 @@ void test_mod_with_bc()
 
 	constexpr const size_t BATCHES = 500;
 
-	std::println("Running {} tests for MODULAR operations with BC, chunks 32, 64", BATCHES);
+	std::println("Running {} tests for all math operations, with chunks of {} bits", BATCHES, STR(BITS_TEST_MOD__BC));
 	for(size_t i = 0; i < BATCHES; i++) {
-		run_test_batch.template operator()<32, 64>();
+		// run_test_batch.template operator()<32, 64>();
+		run_test_batch.template operator()<BITS_TEST_MOD__BC>();
 		progress(i, BATCHES);
 	}
 	std::println("PASSED ALL MOD BC TESTS{}", std::string(12, ' '));

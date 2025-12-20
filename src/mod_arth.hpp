@@ -2,6 +2,8 @@
 
 #include "big_arth.hpp"
 #include "bigint.hpp"
+#include <ostream>
+#include <print>
 #include <utility>
 
 namespace mda
@@ -64,7 +66,8 @@ BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 
 enum class MONT_ALGO {
 	SOS = 0,
-	CIOS
+	CIOS,
+	FIOS
 };
 
 template <size_t Bits, MONT_ALGO algo = MONT_ALGO::SOS>
@@ -92,7 +95,10 @@ private:
 		for(size_t i = 0; i < count; i++) {
 			x *= ((uint)2 - n0 * x);
 		}
-		return (-x); // & mask;
+
+		uint mask = (Bits >= sizeof(uint) * 8) ? (uint)-1 : ((uint)1 << Bits) - 1;
+
+		return (uint)((-x) & mask);
 	}
 
 	bgint calc_r2() const
@@ -133,6 +139,8 @@ public:
 			return mul_sos(a, b);
 		} else if constexpr(algo == MONT_ALGO::CIOS) {
 			return mul_cios(a, b);
+		} else if constexpr(algo == MONT_ALGO::FIOS) {
+			return mul_fios(a, b);
 		}
 	}
 
@@ -156,8 +164,10 @@ public:
 		 * 	for j = 0 to s
 		 * 		u[j] = t[j + s]
 		 */
+		uint mask = (Bits >= sizeof(uint) * 8) ? (uint)-1 : ((uint)1 << Bits) - 1;
+
 		for(size_t i = 0; i < n_chunks; i++) {
-			uint m = (uint)((uintDouble)t.get(i) * n_p); // & mask;
+			uint m = (uint)(((uintDouble)t.get_safe(i) * (uintDouble)n_p) & mask);
 
 			bgint prod(m);
 			prod = bga::mul(prod, n);
@@ -205,16 +215,12 @@ public:
 
 		uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
-		auto get_val = [](const bgint &x, size_t i) -> uint {
-			return (i < x.get_chunks()) ? x.get(i) : 0;
-		};
-
 		for(size_t i = 0; i < n_chunks; i++) {
 			uint carry = 0;
-			uint b_i = get_val(b, i);
+			uint b_i = b.get_safe(i);
 
 			for(size_t j = 0; j < n_chunks; j++) {
-				uintDouble tmp = (uintDouble)t.get(j) + (uintDouble)get_val(a, j) * (uintDouble)b_i + (uintDouble)carry;
+				uintDouble tmp = (uintDouble)t.get(j) + (uintDouble)a.get_safe(j) * (uintDouble)b_i + (uintDouble)carry;
 
 				t.push_bits((uint)(tmp & mask), j);
 				carry = (uint)(tmp >> Bits);
@@ -245,6 +251,107 @@ public:
 
 		return (t >= n) ? bga::sub(t, n) : t;
 	}
+
+	bgint mul_fios(bgint a, bgint b)
+	{
+		/*
+		 * for i to s - 1
+		 * 	(C,S) = t[0] + a[0]b[i]
+		 * 	ADD(t[1], C)
+		 * 	m = S n'[0]modW
+		 * 	(C,S) = S + mn[0]
+		 *
+		 * 	for j to s - 1
+		 * 		(C,S) = t[j] + a[j]b[i] + C
+		 * 		ADD(t[j + 1], C)
+		 * 		(C,S) = S + mn[j]
+		 * 		t[j-1] = S
+		 * 	(C,S) = t[s] + C
+		 * 	t[s - 1] = S
+		 * 	t[s] = t[s + 1] + C
+		 * 	t[s + 1] = 0
+		 */
+		bgint t;
+		t.reserve(n_chunks + 2);
+		t.resize(n_chunks + 2, 0);
+
+		uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
+
+		/*
+		 *   t[j]      n     a[j]
+		 *     \       |      |
+		 *      \      |      |
+		 *       \     V      V
+		 *	  +----------------+
+		 *	  |                |
+		 *   <----|                |<---- (c_mul, c_red)
+		 *        |                |
+		 *   <----|       PE       |<---- b[i]
+		 *        |                |
+		 *   <----|                |<---- m
+		 *	  |                |
+		 *	  +----+------+----+
+		 *	       |      |     \
+		 *	       |      |      \
+		 *	       V      V       \
+		 *                            t[j-1]
+		 */
+		for(size_t i = 0; i < n_chunks; i++) {
+			uint b_i = b.get_safe(i);
+
+			uintDouble tmp_mult = (uintDouble)t.get(0) + (uintDouble)a.get(0) * (uintDouble)b_i;
+
+			uintDouble carry_mul = tmp_mult >> Bits; // C1
+			uint sum_mul = (tmp_mult & mask);
+
+			uint m = ((uintDouble)sum_mul * n_p) & mask;
+
+			uintDouble tmp_red = (uintDouble)sum_mul + (uintDouble)m * n.get(0);
+
+			uintDouble carry_red = tmp_red >> Bits; // C2
+
+			for(size_t j = 1; j < n_chunks; j++) {
+				// uintDouble tmp_pe = (uintDouble)t.get(j) +
+				// 		    (uintDouble)a.get_safe(j) * b_i +
+				// 		    carry_mul + // C1
+				// 		    carry_red;	// C2
+
+				uintDouble tmp_pe1 = (uintDouble)t.get(j) +
+						     (uintDouble)a.get_safe(j) * b_i +
+						     carry_mul;
+
+				uintDouble next_carry_mul = tmp_pe1 >> Bits;
+
+				uintDouble tmp_pe2 = (tmp_pe1 & mask) + carry_red;
+
+				next_carry_mul += tmp_pe2 >> Bits;
+
+				carry_mul = next_carry_mul;
+
+				uint S_partial = (uint)(tmp_pe2 & mask);
+
+				uintDouble tmp_r = (uintDouble)S_partial + (uintDouble)m * n.get(j);
+
+				t.push_bits((uint)(tmp_r & mask), j - 1);
+
+				carry_red = tmp_r >> Bits;
+			}
+
+			uintDouble tmp_end = (uintDouble)t.get(n_chunks) +
+					     carry_mul +
+					     carry_red;
+
+			t.push_bits((uint)(tmp_end & mask), n_chunks - 1);
+			uintDouble carry_final = tmp_end >> Bits;
+
+			uintDouble top_val = (uintDouble)t.get(n_chunks + 1) + carry_final;
+
+			t.push_bits((uint)(top_val & mask), n_chunks);
+			t.push_bits(0, n_chunks + 1);
+		}
+
+		return (t >= n) ? bga::sub(t, n) : t;
+	}
 };
 
 template <size_t Bits, MONT_ALGO algo>
@@ -258,22 +365,5 @@ BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 
 	return mont.trans_back(c_m);
 }
-
-/*
- * for i = 0 to s-1
- * 	(C,S) = t[0] + a[0]b[i]
- * 	ADD(t[1], C)
- * 	m = S * n'[0] mod W
- * 	(C,S) = S + mn[0]
- * 	for j = 1 to s-1
- * 		(C,S) = t[j] + a[j]b[i] + C
- * 		ADD(t[j+1], C)
- * 		(C,S) = S + mn[j]
- * 		t[j-1] = S
- * 	(C,S) = t[s] + C
- * 	t[s-1] = S
- * 	t[s] = t[s+1] + C
- * 	t[s+1] = 0
- */
 
 } // namespace mda

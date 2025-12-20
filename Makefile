@@ -8,13 +8,15 @@ BUILD_DIR = build
 # Compilers flags
 FLAGS = -Wall -Werror -Wno-\#warnings -Wno-c++26-extensions
 
-ifneq (,$(findstring clang,$(CXX)))
+ifneq (,$(findstring clang,$(CXX))) # Using CLANG LLVM
 FLAGS += -Wno-unused-command-line-argument -fcolor-diagnostics -fansi-escape-codes
 TEST_ENV_VARS = ASAN_OPTIONS=symbolize=1 ASAN_SYMBOLIZER_PATH=$(shell which llvm-symbolizer)
+TARGET_NAME := _cl
 $(info [INFO]: Detected Clang compiler)
-else ifneq (,$(findstring g++,$(CXX)))
+else ifneq (,$(findstring g++,$(CXX))) # Using GCC G++
 FLAGS += -fdiagnostics-color=always
 TEST_ENV_VARS = ASAN_OPTIONS=symbolize=1
+TARGET_NAME := _gc
 $(info [INFO]: Detected GCC compiler)
 else
 $(error [ERROR]: Unknown compiler given)
@@ -23,9 +25,11 @@ endif
 ## === DEBUG CHECK ===
 ifeq ($(DEBUG), 1)
 FLAGS += -ggdb -fsanitize=address -fno-omit-frame-pointer
+TARGET_NAME := $(TARGET_NAME)_debug
 $(info [INFO]: Debug mode ON)
 else
 FLAGS += -O3 -DNDEBUG
+TARGET_NAME := $(TARGET_NAME)_release
 $(info [INFO]: Debug mode OFF)
 endif
 ## ===================
@@ -40,7 +44,7 @@ CXX_SRCS = ./cmd/main.cpp \
 	   ./cmd/math_tests.cpp \
 	   ./cmd/mod_tests.cpp
 
-TARGET = $(BUILD_DIR)/tests
+TARGET = $(BUILD_DIR)/tests$(TARGET_NAME)
 
 CXX_OBJS = $(patsubst ./%.cpp, $(BUILD_DIR)/%.o, $(CXX_SRCS))
 DEPS = $(CXX_OBJS:.o=.d)

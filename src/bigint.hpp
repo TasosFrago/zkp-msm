@@ -12,38 +12,39 @@
 #ifndef NDEBUG
 #include <source_location>
 
-#define assertm(expr, msg, ...)                                                           \
-	do {                                                                                  \
-		if(!(expr)) {                                                                     \
+#define assertm(expr, msg, ...)                                                                       \
+	do {                                                                                          \
+		if(!(expr)) {                                                                         \
 			const auto loc = std::source_location::current();                             \
 			std::println(stderr, "Assertion failed: {}:{}", loc.file_name(), loc.line()); \
 			std::println(stderr, msg __VA_OPT__(, ) __VA_ARGS__);                         \
+			std::println("fun: {}", __PRETTY_FUNCTION__);                                 \
 			std::abort();                                                                 \
-		}                                                                                 \
+		}                                                                                     \
 	} while(0)
 #else
-#define assertm(expr, msg, ...) \
+#define assertm(expr, msg, ...)     \
 	do {                        \
-		(void)sizeof(expr);     \
+		(void)sizeof(expr); \
 	} while(0)
 #endif
 
 namespace bga
 {
 
-#define SelectIntType(name, type8, type16, type32, type64)                      \
-	template <size_t Bits>                                                      \
-	constexpr auto name()                                                       \
-	{                                                                           \
+#define SelectIntType(name, type8, type16, type32, type64)                              \
+	template <size_t Bits>                                                          \
+	constexpr auto name()                                                           \
+	{                                                                               \
 		static_assert(Bits > 0 && Bits <= 64, "Bits musth be between [1, 64]"); \
 		if constexpr(Bits <= 8) {                                               \
-			return type8{};                                                     \
+			return type8{};                                                 \
 		} else if constexpr(Bits <= 16) {                                       \
-			return type16{};                                                    \
+			return type16{};                                                \
 		} else if constexpr(Bits <= 32) {                                       \
-			return type32{};                                                    \
+			return type32{};                                                \
 		} else {                                                                \
-			return type64{};                                                    \
+			return type64{};                                                \
 		}                                                                       \
 	}
 
@@ -92,11 +93,11 @@ template <size_t Bits>
 void debug_loop()
 {
 	std::println("Bits: {:02}\tu: {},\tud: {},\ti: {:11},\tid: {}",
-				 Bits,
-				 type_name<typename SelectIntType_t<Bits>::uint_t>(),
-				 type_name<typename SelectIntType_t<Bits>::uintd_t>(),
-				 type_name<typename SelectIntType_t<Bits>::int_t>(),
-				 type_name<typename SelectIntType_t<Bits>::intd_t>());
+		     Bits,
+		     type_name<typename SelectIntType_t<Bits>::uint_t>(),
+		     type_name<typename SelectIntType_t<Bits>::uintd_t>(),
+		     type_name<typename SelectIntType_t<Bits>::int_t>(),
+		     type_name<typename SelectIntType_t<Bits>::intd_t>());
 
 	if constexpr(Bits < 64) {
 		debug_loop<Bits * 2>();
@@ -262,7 +263,19 @@ public:
 
 	T get(size_t idx) const
 	{
+		assertm(idx < radix.size(), "Failed to get with idx being {}", idx);
 		return radix[idx];
+	}
+
+	T &get(size_t idx)
+	{
+		assertm(idx < radix.size(), "Failed to get with idx being {}", idx);
+		return radix[idx];
+	}
+
+	T get_safe(size_t idx) const
+	{
+		return (idx < chunks) ? radix[idx] : 0;
 	}
 
 	std::vector<T> get_reversed() const
@@ -304,6 +317,8 @@ public:
 	size_t effective_size() const
 	{
 		size_t s = chunks;
+		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+		// std::println("s {}, s - 1: {}, radix[s-1] {}", s, s - 1, radix[s - 1]);
 		while(s > 0 && radix[s - 1] == 0) {
 			s--;
 		}
@@ -410,10 +425,10 @@ private:
 	using T_double = typename bga::SelectIntType_t<Bits>::uintd_t;
 
 	enum class Format { DECIMAL,
-						BINARY,
-						HEX,
-						CHUNKS_LSB,
-						CHUNKS_MSB };
+			    BINARY,
+			    HEX,
+			    CHUNKS_LSB,
+			    CHUNKS_MSB };
 	Format format_spec = Format::DECIMAL;
 
 	struct PowerOf10 {

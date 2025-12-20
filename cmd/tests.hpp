@@ -2,17 +2,19 @@
 
 #include <chrono>
 #include <functional>
+#include <iterator>
+#include <map>
 #include <string>
 
 #include "bigint.hpp"
 
-#define test_assert(expr1, expr2, msg, ...)                                                       \
+#define TEST_ASSERT_OLD(expr1, expr2, msg, ...)                                                   \
 	do {                                                                                      \
 		if((expr1) != (expr2)) {                                                          \
 			std::println(stderr, "FAILED TEST: ({}): {} == ({}): {}, " msg,           \
 				     #expr1, (expr1), #expr2, (expr2)__VA_OPT__(, ) __VA_ARGS__); \
 			std::println("fun: {}", __PRETTY_FUNCTION__);                             \
-			exit(1);                                                                  \
+			std::abort();                                                             \
 		}                                                                                 \
 	} while(0)
 
@@ -25,6 +27,107 @@
 				   100.0 * (i + 1) / batches);           \
 			std::fflush(stdout);                             \
 		}                                                        \
+	} while(0)
+
+#define __BITS_TO_TEST_NORMAL 2, 4, 8, 16, 32, 64
+#define __BITS_TO_TEST_BC 32, 40, 64
+
+#define BITS_TEST_MATH__N __BITS_TO_TEST_NORMAL
+#define BITS_TEST_MATH_BC __BITS_TO_TEST_BC
+#define BITS_TEST_MOD___N __BITS_TO_TEST_NORMAL
+#define BITS_TEST_MOD__BC __BITS_TO_TEST_BC
+#define BITS_TEST_CMP___N __BITS_TO_TEST_NORMAL
+#define BITS_TEST_CMP__BC __BITS_TO_TEST_BC
+
+#define __STR_H(...) #__VA_ARGS__
+#define _STR_H(...) __STR_H(__VA_ARGS__)
+#define STR(X) _STR_H(X)
+
+struct TestResults {
+	struct metrics {
+		int passed = 0;
+		int failed = 0;
+		std::string msg;
+	};
+
+	std::map<std::string, metrics> error_table;
+
+	void success(const std::string &key)
+	{
+		error_table[key].passed++;
+	}
+
+	std::string &fail(const std::string &key)
+	{
+		error_table[key].failed++;
+		return error_table[key].msg;
+	}
+
+	void print_results()
+	{
+		int total_passed = 0;
+		int total_failed = 0;
+
+		std::string buf;
+
+		std::println("\n==== RESULTS =====");
+		for(const auto &[key, value] : error_table) {
+			total_passed += value.passed;
+			total_failed += value.failed;
+
+			std::format_to(std::back_inserter(buf),
+				       "[{}] {:<28} [ \033[32mPassed: {:5}\033[0m ] [ \033[31mFailed: {:5}\033[0m ]\n",
+				       ((value.failed > 0) ? "\033[31mTEST\033[0m" : "\033[32mTEST\033[0m"),
+				       key, value.passed, value.failed);
+
+			if(value.failed > 0) {
+				std::println("{:-^7} Errors: {} {:-^7}", "", key, "");
+				std::println("{}", value.msg);
+				std::println("{:-^50}", "");
+			}
+		}
+		std::print("{}", buf);
+		std::println("");
+		std::println("{:=^10} TOTAL SUMMARY {:=^10}", "", "");
+		std::println("Passed: {}", total_passed);
+		std::println("Failed: {}", total_failed);
+
+		if(total_failed == 0) {
+			std::println("RESULT: SUCCESS");
+		} else {
+			std::println("RESULT: FAILED");
+		}
+		std::println("{:=^35}\n", "");
+	}
+};
+
+inline TestResults results;
+
+constexpr std::string_view extract_Bits(std::string_view sig)
+{
+	if(sig.empty()) return "";
+	size_t pos = sig.find_last_of("N =");
+	pos -= 3;
+	size_t end = sig.rfind("]");
+
+	if(pos != std::string_view::npos) {
+		return sig.substr(pos, end - pos);
+	}
+	return "";
+}
+
+#define test_assert(key, expr1, expr2, msg, ...)                                                                  \
+	do {                                                                                                      \
+		if((expr1) != (expr2)) {                                                                          \
+			auto &buff = results.fail(key);                                                           \
+			std::format_to(std::back_inserter(buff),                                                  \
+				       "\t[\033[31mFAILED\033[0m]:[{}] ({}): {} == ({}): {},\n\t\t\t" msg "\n\n", \
+				       extract_Bits(__PRETTY_FUNCTION__),                                         \
+				       #expr1, (expr1), #expr2, (expr2)__VA_OPT__(, ) __VA_ARGS__);               \
+                                                                                                                  \
+		} else {                                                                                          \
+			(results).success(key);                                                                   \
+		}                                                                                                 \
 	} while(0)
 
 class BcExec
