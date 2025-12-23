@@ -5,7 +5,7 @@
 #include "bigint.hpp"
 #include "mod_arth.hpp"
 
-#include "tests.hpp"
+#include "tests/tests.hpp"
 
 int main(int argc, char *argv[])
 {
@@ -36,16 +36,22 @@ int main(int argc, char *argv[])
 	std::println("q: {}, r: {}", c.first, c.second);
 	// std::exit(1);
 
-	test_cmps();
-	test_cmps_with_bc();
+	// test_cmps();
+	// test_cmps_with_bc();
+	//
+	// test_operations();
+	// test_operations_with_bc();
+	//
+	// test_mod();
+	// test_mod_with_bc();
 
-	test_operations();
-	test_operations_with_bc();
+	register_math_tests();
+	register_cmp_tests();
+	register_mod_tests();
 
-	test_mod();
-	test_mod_with_bc();
+	TESTS.run_all();
 
-	results.print_results();
+	// results.print_results();
 
 	std::println("");
 

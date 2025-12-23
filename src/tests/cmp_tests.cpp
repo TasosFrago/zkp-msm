@@ -3,7 +3,59 @@
 
 #include "bigint.hpp"
 
+#include "test_framework.hpp"
 #include "tests.hpp"
+
+struct TestCmpLogic {
+	template <size_t N>
+	void operator()(std::mt19937_64 &gen) const noexcept
+	{
+		std::uniform_int_distribution<uint64_t> dist;
+
+		uint64_t A = dist(gen), B = dist(gen);
+		bga::BigInt<N> a(A), b(B);
+
+		test_assert("cmp >", A > B, a > b, "a: {}, b: {}", A, B);
+		test_assert("cmp <", A < B, a < b, "a: {}, b: {}", A, B);
+		test_assert("cmp >=", A >= B, a >= b, "a: {}, b: {}", A, B);
+		test_assert("cmp <=", A <= B, a <= b, "a: {}, b: {}", A, B);
+		test_assert("cmp ==", A == B, a == b, "a: {}, b: {}", A, B);
+	};
+};
+
+struct TestCmpBCLogic {
+	constexpr static const size_t DIGITS = 10;
+
+	template <size_t N>
+	void operator()(std::mt19937_64 &gen) const noexcept
+	{
+		auto generator = genRandBgN(DIGITS);
+
+		using namespace bga;
+
+		std::string A = generator(), B = generator();
+		BigInt<N> a(A), b(B);
+
+		test_assert("cmp bc >", run_bc(a, ">", b), (a > b), "a: {}, b: {}", A, B);
+		test_assert("cmp bc <", run_bc(a, "<", b), (a < b), "a: {}, b: {}", A, B);
+		test_assert("cmp bc >=", run_bc(a, ">=", b), (a >= b), "a: {}, b: {}", A, B);
+		test_assert("cmp bc <=", run_bc(a, "<=", b), (a <= b), "a: {}, b: {}", A, B);
+		test_assert("cmp bc ==", run_bc(a, "==", b), (a == b), "a: {}, b: {}", A, B);
+	};
+};
+
+void register_cmp_tests()
+{
+	TESTS.register_test<BITS_TEST_CMP___N>(
+	    "Comparison operations",
+	    1000,
+	    TestCmpLogic{});
+
+	TESTS.register_test<BITS_TEST_CMP__BC>(
+	    "Comparison BC operations",
+	    1000,
+	    TestCmpBCLogic{});
+}
 
 void test_cmps()
 {

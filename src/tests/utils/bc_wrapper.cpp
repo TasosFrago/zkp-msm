@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "tests.hpp"
+#include "tests/utils/helpers.hpp"
 
 std::function<std::string()> genRandBgN(size_t digits)
 {

@@ -39,10 +39,10 @@ CXXFLAGS = -std=c++23 -MMD -MP $(FLAGS) $(INCLUDES)
 
 ## === SOURCE CDOE ===
 CXX_SRCS = ./cmd/main.cpp \
-	   ./cmd/bc_wrapper.cpp \
-	   ./cmd/cmp_tests.cpp \
-	   ./cmd/math_tests.cpp \
-	   ./cmd/mod_tests.cpp
+	   ./src/tests/utils/bc_wrapper.cpp \
+	   ./src/tests/cmp_tests.cpp \
+	   ./src/tests/math_tests.cpp \
+	   ./src/tests/mod_tests.cpp
 
 TARGET = $(BUILD_DIR)/tests$(TARGET_NAME)
 
