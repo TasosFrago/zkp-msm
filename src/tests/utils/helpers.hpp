@@ -17,7 +17,7 @@ private:
 public:
 	static BcExec &instance()
 	{
-		static BcExec instance;
+		thread_local BcExec instance;
 		return instance;
 	}
 

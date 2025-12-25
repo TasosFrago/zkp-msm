@@ -89,12 +89,20 @@ std::string BcExec::calculate(std::string_view a, std::string_view op, std::stri
 	char buf;
 	while(true) {
 		ssize_t bytes_read = read(pipe_out_[0], &buf, 1);
-		if(bytes_read == '\n') break;
+
+		if(bytes_read <= 0) throw std::runtime_error("bc process closed pipe unexpectedly");
+
+		// if(bytes_read == '\n') break;
 		if(buf == '\n') break;
 		if(buf == '\\') {
-			char next;
-			read(pipe_out_[0], &next, 1);
+			ssize_t next_read = read(pipe_out_[0], &buf, 1);
+			if(next_read <= 0) break;
+			if(buf == '\n') continue;
+			res += buf;
 			continue;
+			// char next;
+			// read(pipe_out_[0], &next, 1);
+			// continue;
 		}
 		res += buf;
 	}

@@ -44,6 +44,8 @@ CXX_SRCS = ./cmd/main.cpp \
 	   ./src/tests/math_tests.cpp \
 	   ./src/tests/mod_tests.cpp
 
+LIBS = -ltbb
+
 TARGET = $(BUILD_DIR)/tests$(TARGET_NAME)
 
 CXX_OBJS = $(patsubst ./%.cpp, $(BUILD_DIR)/%.o, $(CXX_SRCS))
@@ -60,7 +62,7 @@ all: $(TARGET)
 
 $(TARGET): $(CXX_OBJS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIBS)
 
 $(BUILD_DIR)/%.o: ./%.cpp
 	@mkdir -p $(dir $@)

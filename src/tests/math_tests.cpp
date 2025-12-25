@@ -36,7 +36,7 @@ struct TestMathLogic {
 		BigInt<N> a_div(A_div), b_div(B_div);
 
 		auto [div_a_div_b_div_quotient, div_a_div_b_div_remainder] =
-		    div_fi(a_div, b_div);
+		    div(a_div, b_div);
 
 		test_assert("math division (q)",
 			    BigInt<N>(A_div / B_div), div_a_div_b_div_quotient, "a: {}, b: {}, (A_div / B_div) = {}", A_div, B_div, (A_div / B_div));
@@ -96,7 +96,7 @@ struct TestMathBCLogic {
 		BigInt<N> &b_div = (a > b) ? b : a;
 
 		auto [div_a_div_b_div_quotient, div_a_div_b_div_remainder] =
-		    div_fi(a_div, b_div);
+		    div(a_div, b_div);
 
 		test_assert("math bc division (q)",
 			    run_bc(a_div, "/", b_div), div_a_div_b_div_quotient, "a: {}, b: {}", a, b);
@@ -119,12 +119,12 @@ void register_math_tests()
 {
 	TESTS.register_test<BITS_TEST_MATH__N>(
 	    "Math Operations",
-	    1000,
+	    MATH_BATCHES,
 	    TestMathLogic{});
 
 	TESTS.register_test<BITS_TEST_MATH_BC>(
 	    "Math BC operations",
-	    1000,
+	    MATH_BC_BATCHES,
 	    TestMathBCLogic{});
 }
 
@@ -153,7 +153,7 @@ void test_operations()
 		BigInt<N> a_div(A_div), b_div(B_div);
 
 		auto [div_a_div_b_div_quotient, div_a_div_b_div_remainder] =
-		    div_fi(a_div, b_div);
+		    div(a_div, b_div);
 
 		test_assert("math division (q)",
 			    BigInt<N>(A_div / B_div), div_a_div_b_div_quotient, "a: {}, b: {}, (A_div / B_div) = {}", A_div, B_div, (A_div / B_div));
@@ -228,7 +228,7 @@ void test_operations_with_bc()
 		BigInt<N> &b_div = (a > b) ? b : a;
 
 		auto [div_a_div_b_div_quotient, div_a_div_b_div_remainder] =
-		    div_fi(a_div, b_div);
+		    div(a_div, b_div);
 
 		test_assert("math bc division (q)",
 			    run_bc(a_div, "/", b_div), div_a_div_b_div_quotient, "a: {}, b: {}", a, b);

@@ -1,8 +1,11 @@
 #pragma once
 
+#include <execution>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <map>
+#include <mutex>
 #include <random>
 #include <string>
 
@@ -24,10 +27,42 @@
 #define STR(X) _STR_H(X)
 
 struct TestSuite {
-	std::random_device rd;
 	using test_fn = std::function<void(void)>;
 
 	std::vector<test_fn> test_suites;
+
+	std::mutex mtx;
+
+	std::mutex console_mtx;
+	int total_suites = 0;
+
+	std::string make_progress_bar(std::string_view name, int p, int width = 50)
+	{
+		int bar_width = width - 20;
+		int filled = (p * bar_width) / 100;
+
+		std::string bar = "[";
+		bar.append(filled, '#');
+		bar.append(bar_width - filled, '.');
+		bar += "]";
+
+		return std::format("{:<30} {} {:3}%", name, bar, p);
+	}
+
+	void update_line(int row_index, const std::string &text)
+	{
+		std::lock_guard<std::mutex> lock(console_mtx);
+
+		// std::print("\0337");
+
+		int lines_up = total_suites - row_index;
+		std::print("\033[{}A", lines_up);
+
+		std::print("\r\033[K{}", text);
+		std::print("\033[{}B", lines_up);
+		// std::print("\0338");
+		std::cout << std::flush;
+	}
 
 	struct metrics {
 		int passed = 0;
@@ -39,11 +74,13 @@ struct TestSuite {
 
 	void success(const std::string &key)
 	{
+		std::lock_guard<std::mutex> lock(mtx);
 		error_table[key].passed++;
 	}
 
 	std::string &fail(const std::string &key)
 	{
+		std::lock_guard<std::mutex> lock(mtx);
 		error_table[key].failed++;
 		return error_table[key].msg;
 	}
@@ -88,29 +125,56 @@ struct TestSuite {
 	template <size_t... Ns, typename Func>
 	void register_test(std::string name, size_t batches, Func &&test_logic)
 	{
+		total_suites += 2;
+		int my_id = total_suites - 1;
 		std::string bits_list;
 		((bits_list += (bits_list.empty() ? "" : ", ") + std::to_string(Ns)), ...);
 
-		auto test_wrapper = [=, logic = std::forward<Func>(test_logic)]() {
-			std::println("Running {} ({} batches) with chunks of ({}) bits...", name, batches, bits_list);
+		auto test_wrapper = [=, this, logic = std::forward<Func>(test_logic)]() {
+			std::string start_msg = std::format("Running {} ({} batches) with chunks of ({}) bits...", name, batches, bits_list);
+			update_line(my_id, start_msg);
 
 			std::random_device rd;
-			std::mt19937_64 gen(rd());
+			std::mt19937_64 gene(rd());
 
 			for(size_t i = 0; i < batches; i++) {
-				(logic.template operator()<Ns>(gen), ...);
-				progress(i, batches);
+				(logic.template operator()<Ns>(gene), ...);
+				// progress(i, batches);
+
+				if(batches > 100 && i % (batches / 100) == 0) {
+					int percent = (i * 100) / batches;
+					update_line(my_id + 1, make_progress_bar(name, percent, 100));
+				}
 			}
-			std::println("COMPLETED {}.{}", name, std::string(12, ' '));
+			std::string msg = std::format("COMPLETED {}.{}", name, std::string(12, ' '));
+			update_line(my_id + 1, msg);
 		};
 		test_suites.push_back(test_wrapper);
 	}
 
 	void run_all()
 	{
-		for(auto &test : test_suites) {
-			test();
+		std::println("Starting execution across {} threads...", std::thread::hardware_concurrency());
+		total_suites++;
+
+		for(int i = 0; i < total_suites; i++) {
+			std::println("");
 		}
+
+		std::print("\033[?25l");
+		std::cout << std::flush;
+		// for(auto &test : test_suites) {
+		// 	test();
+		// }
+		std::for_each(
+		    std::execution::par,
+		    test_suites.begin(),
+		    test_suites.end(),
+		    [](auto &suite) { suite(); });
+
+		std::print("\033[?25h");
+		std::cout << std::flush;
+
 		print_results();
 	}
 };

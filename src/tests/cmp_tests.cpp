@@ -48,12 +48,12 @@ void register_cmp_tests()
 {
 	TESTS.register_test<BITS_TEST_CMP___N>(
 	    "Comparison operations",
-	    1000,
+	    CMP_BATCHES,
 	    TestCmpLogic{});
 
 	TESTS.register_test<BITS_TEST_CMP__BC>(
 	    "Comparison BC operations",
-	    1000,
+	    CMP_BC_BATCHES,
 	    TestCmpBCLogic{});
 }
 

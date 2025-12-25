@@ -121,12 +121,28 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 	if(a == b) return { BigInt<Bits>(1), BigInt<Bits>(0) };
 	if(a < b) return { BigInt<Bits>(0), a };
 
+	// if(b.get_chunks() == 1) {
+	// 	uintDouble divisor = b.get(0);
+	// 	uintDouble remainder = 0;
+	// 	BigInt<Bits> q;
+	// 	q.resize(a.get_chunks(), 0);
+	//
+	// 	for(int i = a.get_chunks() - 1; i >= 0; i--) {
+	// 		uintDouble cur = ((uintDouble)remainder << Bits) | a.get(i);
+	// 		q.push_bits((uint)(cur / divisor), i);
+	// 		remainder = cur % divisor;
+	// 	}
+	// 	BigInt<Bits> r;
+	// 	r.push_bits((uint)remainder);
+	// 	return { q, r };
+	// }
+
 	// std::println("BEFORE NORMALIZATION: a {}, n {},  b {}, t {}\n", a, a.get_chunks(), b, b.get_chunks());
 
 	// NORMALIZATION
 	uint top_chunk = b.get(b.get_chunks() - 1);
-	size_t shift = 2 * 4 * Bits; // + Bits / 2;
-	// size_t shift = 0;
+	// size_t shift = 2 * 4 * Bits; // + Bits / 2;
+	size_t shift = 0;
 	// if constexpr(Bits < 8) std::println("shift {}, a {}, b {}", shift, a, b);
 
 	while(((top_chunk >> (Bits - 1 - shift)) & 1) == 0) {
@@ -216,13 +232,13 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 		// 	if(hat_r >= BASE) break;
 		// }
 
-		// uintDouble lhs = b.get_safe(t) * BASE + b.get_safe(t - 1);
+		uintDouble lhs = b.get_safe(t) * BASE + b.get_safe(t - 1);
 		// uintDouble lhs = b.get_safe(t) + ((uintDouble)b.get_safe(t - 1) >> Bits);
-		uintDouble lhs = ((uintDouble)b.get_safe(t) << Bits) | b.get_safe(t - 1);
+		// uintDouble lhs = ((uintDouble)b.get_safe(t) << Bits) | b.get_safe(t - 1);
 		// uintDouble lhs = b.get_safe(t) + (0);
 
-		// uintDouble rhs = a.get_safe(i) * (BASE * BASE) + a.get_safe(i - 1) * BASE + a.get_safe(i - 2);
-		uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + ((uintDouble)a.get_safe(i - 2) >> Bits);
+		uintDouble rhs = a.get_safe(i) * (BASE * BASE) + a.get_safe(i - 1) * BASE + a.get_safe(i - 2);
+		// uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + ((uintDouble)a.get_safe(i - 2) >> Bits);
 		// uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + (0);
 
 		// int cnt = 0;
@@ -315,7 +331,7 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 }
 
 template <size_t Bits>
-std::pair<BigInt<Bits>, BigInt<Bits>> div_fi(BigInt<Bits> a, BigInt<Bits> b)
+std::pair<BigInt<Bits>, BigInt<Bits>> div_fii(BigInt<Bits> a, BigInt<Bits> b)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	assertm(b.get_chunks() >= 1 && b.get(b.get_chunks() - 1) != 0, "Can't divide by zero");

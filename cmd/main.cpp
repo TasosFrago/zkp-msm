@@ -30,9 +30,9 @@ int main(int argc, char *argv[])
 
 	std::println("c_sos {} == c_cios {} == c_fios {}", c_sos, c_cios, c_fios);
 
-	bga::bgint<8> x = 721948327;
-	bga::bgint<8> y = 84461;
-	auto c = bga::div_fi(x, y);
+	bga::bgint<32> x = 721948327;
+	bga::bgint<32> y = 84461;
+	auto c = bga::div(x, y);
 	std::println("q: {}, r: {}", c.first, c.second);
 	// std::exit(1);
 
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
 
 	TESTS.run_all();
 
-	// results.print_results();
+	// TESTS.print_results();
 
 	std::println("");
 

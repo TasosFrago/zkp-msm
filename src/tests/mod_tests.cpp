@@ -127,12 +127,12 @@ void register_mod_tests()
 {
 	TESTS.register_test<BITS_TEST_MOD___N>(
 	    "Modular operations",
-	    1000,
+	    MOD_BATCHES,
 	    TestModLogic{});
 
 	TESTS.register_test<BITS_TEST_MOD__BC>(
 	    "Modular BC operations",
-	    1000,
+	    MOD_BC_BATCHES,
 	    TestModBCLogic{});
 }
 
