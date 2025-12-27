@@ -117,8 +117,8 @@ private:
 
 public:
 	Montgomery(bgint modulus)
-	    : n(std::move(modulus)), n_chunks(modulus.get_chunks()),
-	      total_bits(n.get_chunks() * Bits)
+	    : n(std::move(modulus)), n_chunks(n.get_chunks()),
+	      total_bits(n_chunks * Bits)
 	{
 		static_assert(Bits <= 64 && "Can't support larger bits sizes");
 		assert(!n.is_negative() && "Modulus must be positive");

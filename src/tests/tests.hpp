@@ -13,11 +13,11 @@
 #define BITS_TEST_CMP__BC __BITS_TO_TEST_BC
 
 #define MATH_BATCHES 1000
-#define MATH_BC_BATCHES 500
+#define MATH_BC_BATCHES 1000
 #define CMP_BATCHES 1000
 #define CMP_BC_BATCHES 1000
 #define MOD_BATCHES 1000
-#define MOD_BC_BATCHES 500
+#define MOD_BC_BATCHES 1000
 
 void register_math_tests();
 void register_cmp_tests();

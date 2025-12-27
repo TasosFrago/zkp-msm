@@ -27,12 +27,11 @@
 #define STR(X) _STR_H(X)
 
 struct TestSuite {
+	bool parallel_exec = true;
 	using test_fn = std::function<void(void)>;
-
 	std::vector<test_fn> test_suites;
 
 	std::mutex mtx;
-
 	std::mutex console_mtx;
 	int total_suites = 0;
 
@@ -43,7 +42,7 @@ struct TestSuite {
 
 		std::string bar = "[";
 		bar.append(filled, '#');
-		bar.append(bar_width - filled, '.');
+		bar.append(bar_width - filled, '-');
 		bar += "]";
 
 		return std::format("{:<30} {} {:3}%", name, bar, p);
@@ -161,19 +160,23 @@ struct TestSuite {
 			std::println("");
 		}
 
-		std::print("\033[?25l");
-		std::cout << std::flush;
-		// for(auto &test : test_suites) {
-		// 	test();
-		// }
-		std::for_each(
-		    std::execution::par,
-		    test_suites.begin(),
-		    test_suites.end(),
-		    [](auto &suite) { suite(); });
+		if(parallel_exec) {
+			std::print("\033[?25l");
+			std::cout << std::flush;
 
-		std::print("\033[?25h");
-		std::cout << std::flush;
+			std::for_each(
+			    std::execution::par,
+			    test_suites.begin(),
+			    test_suites.end(),
+			    [](auto &suite) { suite(); });
+
+			std::print("\033[?25h");
+			std::cout << std::flush;
+		} else {
+			for(auto &test : test_suites) {
+				test();
+			}
+		}
 
 		print_results();
 	}

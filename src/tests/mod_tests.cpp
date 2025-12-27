@@ -44,13 +44,10 @@ struct TestModLogic {
 
 		// Modular Multiplication
 		// C++ Check: (A * B) % M
-		if constexpr(N > 8) {
-
-			test_assert("mod multiplication SOS",
-				    BigInt<N>((A * B) % M),
-				    (mda::mul<N, sos>(a, b, m)),
-				    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
-		}
+		test_assert("mod multiplication SOS",
+			    BigInt<N>((A * B) % M),
+			    (mda::mul<N, sos>(a, b, m)),
+			    "Mod Mul: a: {}, b: {}, m: {}", A, B, M);
 
 		test_assert("mod multiplication CIOS",
 			    BigInt<N>((A * B) % M),

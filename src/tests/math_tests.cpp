@@ -9,6 +9,31 @@
 #include "test_framework.hpp"
 #include "tests.hpp"
 
+struct TestMathEdgeCases {
+	template <size_t N>
+	void operator()(std::mt19937_64 &gen) const noexcept
+	{
+		using namespace bga;
+
+		BigInt<N> zero(0);
+		BigInt<N> one(1);
+		BigInt<N> two(2);
+		BigInt<N> large("0xf00");
+
+		BigInt<N> neg_one(1);
+		neg_one.set_sign(true);
+		BigInt<N> neg_two(2);
+		neg_two.set_sign(true);
+
+		test_assert("math edge cases", zero, add(zero, zero), "0 + 0 = 0");
+		test_assert("math edge cases", zero, sub(zero, zero), "0 - 0 = 0");
+		test_assert("math edge cases", zero, mul(zero, zero), "0 * 0 = 0");
+		test_assert("math edge cases", large, add(large, zero), "large + 0 = 0");
+		test_assert("math edge cases", large, sub(large, zero), "large - 0 = 0");
+		test_assert("math edge cases", zero, mul(large, zero), "large * 0 = 0");
+	}
+};
+
 struct TestMathLogic {
 	static uint64_t safe_rshift(uint64_t a, uint8_t b) noexcept
 	{
@@ -31,6 +56,7 @@ struct TestMathLogic {
 		test_assert("math multiplication",
 			    BigInt<N>(A * B), mul(a, b), "a: {}, b: {}, (A * B) = {}", A, B, (A * B));
 
+		// if constexpr(N > 4) {
 		__int128_t A_div = (A > B) ? A : B;
 		__int128_t B_div = (A > B) ? B : A;
 		BigInt<N> a_div(A_div), b_div(B_div);
@@ -42,6 +68,7 @@ struct TestMathLogic {
 			    BigInt<N>(A_div / B_div), div_a_div_b_div_quotient, "a: {}, b: {}, (A_div / B_div) = {}", A_div, B_div, (A_div / B_div));
 		test_assert("math division (r)",
 			    BigInt<N>(A_div % B_div), div_a_div_b_div_remainder, "a: {}, b: {}, (A_div % B_div) = {}", A_div, B_div, (A_div % B_div));
+		// }
 
 		test_assert("math rshift",
 			    BigInt<N>(safe_rshift(A, (uint8_t)B)), rshift(a, (uint8_t)B), "a: {}, b: {}, chunk {}", A, (uint8_t)B, rshift(a, (uint8_t)B).get_chunks());
@@ -121,6 +148,11 @@ void register_math_tests()
 	    "Math Operations",
 	    MATH_BATCHES,
 	    TestMathLogic{});
+
+	TESTS.register_test<BITS_TEST_MATH__N>(
+	    "Math Edge Cases",
+	    1,
+	    TestMathEdgeCases{});
 
 	TESTS.register_test<BITS_TEST_MATH_BC>(
 	    "Math BC operations",

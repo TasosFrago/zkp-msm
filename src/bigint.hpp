@@ -114,7 +114,7 @@ private:
 
 	// Returns vector with chuncs from LSB to MSB
 	std::vector<T> radix;
-	size_t chunks = 0;
+	// size_t chunks = 0;
 	size_t bits;
 	bool m_is_negative;
 
@@ -133,6 +133,14 @@ private:
 			num.erase(0, 1);
 		}
 		return remainder;
+	}
+
+	constexpr static uint8_t hexCharToInt(char c)
+	{
+		if(c >= '0' && c <= '9') return c - '0';
+		if(c >= 'A' && c <= 'F') return c - 'A' + 10;
+		if(c >= 'a' && c <= 'f') return c - 'a' + 10;
+		assertm(false, "Invalid argument given to function");
 	}
 
 public:
@@ -165,13 +173,23 @@ public:
 
 	BigInt(std::string a) : bits(Bits), decimal_repr(a)
 	{
-		chunks = 0;
+		// chunks = 0;
 		std::vector<bool> bitArray;
 
 		m_is_negative = (a[0] == '-');
-		if(m_is_negative) a.erase(0, 1);
+		if(m_is_negative) a.erase(0, 1); // remove sign
 
-		if(false) {
+		if(a[0] == '0' && a[1] == 'x') {
+			a.erase(0, 2); // remove the 0x prefix
+
+			for(int64_t i = a.size() - 1; i >= 0; i--) {
+				uint8_t val = hexCharToInt(a[i]);
+
+				bitArray.push_back(val & 1);
+				bitArray.push_back((val >> 1) & 1);
+				bitArray.push_back((val >> 2) & 1);
+				bitArray.push_back((val >> 3) & 1);
+			}
 
 		} else {
 			std::string tmp = a;
@@ -179,6 +197,7 @@ public:
 				bitArray.push_back(devideStrBy2(tmp));
 			}
 		}
+
 		int remainder = bitArray.size() % bits;
 		if(remainder != 0) {
 			int padding = bits - remainder;
@@ -196,16 +215,16 @@ public:
 				}
 			}
 			radix.push_back(chunkValue);
-			chunks++;
-			assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+			// chunks++;
+			// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 		}
 	}
 
 	void push_bits(T num)
 	{
 		radix.push_back(num);
-		chunks++;
-		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+		// chunks++;
+		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
 	using iterator = std::vector<T>::iterator;
@@ -223,7 +242,7 @@ public:
 	iterator insert(const_iterator pos, InputIt first, InputIt last)
 	{
 		auto res = radix.insert(pos, first, last);
-		chunks = radix.size();
+		// chunks = radix.size();
 		return res;
 	}
 
@@ -240,15 +259,16 @@ public:
 	void resize(size_t n)
 	{
 		radix.resize(n);
-		chunks = radix.size();
-		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+		// chunks = radix.size();
+		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
 	void resize(size_t n, size_t num)
 	{
 		radix.resize(n, num);
-		chunks += n;
-		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+		// std::println("radix size {}", radix.size());
+		// chunks += n;
+		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
 	std::vector<T> &get()
@@ -275,7 +295,7 @@ public:
 
 	T get_safe(size_t idx) const
 	{
-		return (idx < chunks) ? radix[idx] : 0;
+		return (idx < radix.size()) ? radix[idx] : 0;
 	}
 
 	std::vector<T> get_reversed() const
@@ -293,7 +313,7 @@ public:
 	}
 	size_t get_chunks() const
 	{
-		return chunks;
+		return radix.size();
 	}
 	bool is_negative() const
 	{
@@ -307,17 +327,26 @@ public:
 
 	bool is_zero() const
 	{
-		if(chunks == 0) return true;
+		if(radix.size() == 0) return true;
 		for(const auto el : radix) {
 			if(el != 0) return false;
 		}
-		assert(!"Unreachable");
+		return true;
+	}
+
+	void trim()
+	{
+		while(radix.size() > 1 && radix.back() == 0) {
+			radix.pop_back();
+			// chunks--;
+		}
+		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
 	size_t effective_size() const
 	{
-		size_t s = chunks;
-		assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
+		size_t s = radix.size();
+		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 		// std::println("s {}, s - 1: {}, radix[s-1] {}", s, s - 1, radix[s - 1]);
 		while(s > 0 && radix[s - 1] == 0) {
 			s--;
@@ -330,10 +359,13 @@ public:
 		size_t a_chunks = this->effective_size();
 		size_t b_chunks = other.effective_size();
 
-		if(a_chunks == 0 && b_chunks) return true;
+		// if(a_chunks == 0 && b_chunks == 0) return true;
+		if(a_chunks != b_chunks) return false;
+
+		if(a_chunks == 0) return true;
+		if(a_chunks == 1 && radix[0] == 0 && other.get(0) == 0) return true;
 
 		if(m_is_negative != other.is_negative()) return false;
-		if(a_chunks != b_chunks) return false;
 
 		for(size_t i = 0; i < a_chunks; i++) {
 			if(radix[i] != other.get(i)) {
@@ -370,17 +402,17 @@ public:
 		return m_is_negative ? (0 <=> res) : res;
 	}
 
-	void printme()
+	__attribute__((noinline, used)) void printme()
 	{
 		std::println("{}", (*this));
 	}
 
-	std::string str()
+	__attribute__((noinline, used)) std::string str()
 	{
 		return std::format("{}", (*this));
 	}
 
-	void print_all()
+	__attribute__((noinline, used)) void print_all()
 	{
 		std::println("Dec:\t{}", (*this));
 		std::println("Bin:\t{:b}", (*this));
@@ -596,6 +628,8 @@ public:
 
 		// --- Binary Logic ---
 		case Format::BINARY: {
+			if(is_negative) out = std::format_to(out, "-");
+
 			bool leadingZeros = true;
 			for(auto it = num_radix.rbegin(); it != num_radix.rend(); ++it) {
 				T chunk = *it;
@@ -612,9 +646,12 @@ public:
 
 		// --- Hex Logic (MSB to LSB) ---
 		case Format::HEX: {
+			if(is_negative) out = std::format_to(out, "-");
+
 			out = std::format_to(out, "0x");
 			bool leadingZeros = true;
 
+			// FIX: When printing values of Bits lower than 4bits i.e a hex digit it padds the value with leading zeros and the value printed is wrong. Solution detect that and combine the values.
 			for(auto it = num_radix.rbegin(); it != num_radix.rend(); ++it) {
 				T chunk = *it;
 				size_t hex_digits = (chunk_bits + 3) / 4;
@@ -636,6 +673,7 @@ public:
 		// --- Chunks (LSB to MSB) ---
 		case Format::CHUNKS_LSB: {
 			out = std::format_to(out, "[LSB] ");
+			if(is_negative) out = std::format_to(out, "-");
 			for(const T &chunk : num_radix) {
 				// Print each chunk as binary with leading zeros
 				for(int b = chunk_bits - 1; b >= 0; b--) {
@@ -650,6 +688,7 @@ public:
 		// --- Chunks (MSB to LSB) ---
 		case Format::CHUNKS_MSB: {
 			out = std::format_to(out, "[MSB] ");
+			if(is_negative) out = std::format_to(out, "-");
 			for(auto it = num_radix.rbegin(); it != num_radix.rend(); ++it) {
 				// Print each chunk as binary with leading zeros
 				for(int b = chunk_bits - 1; b >= 0; b--) {

@@ -73,6 +73,7 @@ BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b)
 
 		return result;
 	}
+	W.trim();
 
 	return W;
 }
@@ -86,10 +87,21 @@ BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b)
 
 	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
-	if(a == BigInt<Bits>(1))
+	bool a_sign = a.is_negative();
+	bool b_sign = b.is_negative();
+	a.set_sign(false);
+	b.set_sign(false);
+
+	if(a == BigInt<Bits>(1)) {
+		b.set_sign(a_sign != b_sign);
 		return b;
-	else if(b == BigInt<Bits>(1))
+	}
+	if(b == BigInt<Bits>(1)) {
+		a.set_sign(a_sign != b_sign);
 		return a;
+	}
+	if(a.is_zero() || b.is_zero())
+		return BigInt<Bits>(0);
 
 	BigInt<Bits> W;
 	W.reserve(a.get_chunks() + b.get_chunks() + 1);
@@ -105,6 +117,8 @@ BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b)
 		W.push_bits(carry, i + a.get_chunks());
 	}
 
+	W.set_sign(a_sign != b_sign);
+
 	return W;
 }
 
@@ -112,261 +126,33 @@ template <size_t Bits>
 std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
-	// assertm(a.get_chunks() >= b.get_chunks() && a.get_chunks() >= 1 && b.get_chunks() >= 1, "a needs to be larger than b and they both need to be larger or equal than 1");
 	assertm(b.get_chunks() >= 1 && b.get(b.get_chunks() - 1) != 0, "Can't divide by zero");
 
-	// using uint = typename SelectIntType_t<Bits>::uint_t;
-	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
+	bool a_sign = a.is_negative();
+	bool b_sign = b.is_negative();
 
-	if(a == b) return { BigInt<Bits>(1), BigInt<Bits>(0) };
-	if(a < b) return { BigInt<Bits>(0), a };
+	a.set_sign(false);
+	b.set_sign(false);
 
-	// if(b.get_chunks() == 1) {
-	// 	uintDouble divisor = b.get(0);
-	// 	uintDouble remainder = 0;
-	// 	BigInt<Bits> q;
-	// 	q.resize(a.get_chunks(), 0);
-	//
-	// 	for(int i = a.get_chunks() - 1; i >= 0; i--) {
-	// 		uintDouble cur = ((uintDouble)remainder << Bits) | a.get(i);
-	// 		q.push_bits((uint)(cur / divisor), i);
-	// 		remainder = cur % divisor;
-	// 	}
-	// 	BigInt<Bits> r;
-	// 	r.push_bits((uint)remainder);
-	// 	return { q, r };
-	// }
-
-	// std::println("BEFORE NORMALIZATION: a {}, n {},  b {}, t {}\n", a, a.get_chunks(), b, b.get_chunks());
-
-	// NORMALIZATION
-	uint top_chunk = b.get(b.get_chunks() - 1);
-	// size_t shift = 2 * 4 * Bits; // + Bits / 2;
-	size_t shift = 0;
-	// if constexpr(Bits < 8) std::println("shift {}, a {}, b {}", shift, a, b);
-
-	while(((top_chunk >> (Bits - 1 - shift)) & 1) == 0) {
-		shift++;
+	if(a == b) {
+		BigInt<Bits> q(1);
+		q.set_sign(a_sign != b_sign);
+		return { q, BigInt<Bits>(0) };
 	}
-
-	if(shift > 0) {
-		a = lshift(a, shift);
-		b = lshift(b, shift);
+	if(a < b) {
+		a.set_sign(a_sign);
+		return { BigInt<Bits>(0), a };
 	}
-
-	// if constexpr(Bits < 8) std::println("same shift {}, a {}, b {}", shift, a, b);
-	size_t n = a.get_chunks() - 1;
-	size_t t = b.get_chunks() - 1;
-
-	// std::println("\n");
-	// std::println("a {} | n {}, b {} | t {}", a, n, b, t);
-
-	BigInt<Bits> q;
-	q.resize((n - t + 1), 0);
-
-	// std::println("q {}", q);
-
-	BigInt<Bits> r;
-	r.reserve(b.get_chunks());
-
-	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
-	// std::println("mask {:b}", mask);
-
-	uintDouble BASE = (uintDouble)1 << Bits;
-
-	BigInt<Bits> bb_nt = lshift(b, (n - t) * Bits);
-	// std::println("bb_nt {}", bb_nt);
-	uint q_val = q.get_safe(n - t);
-	// std::println("q_val {}", q_val);
-
-	while(a >= bb_nt) {
-		q_val++;
-		q_val &= mask;
-		a = sub(a, bb_nt);
-	}
-	// std::println("q_val {}", q_val);
-	q.push_bits(q_val, n - t);
-	// std::println("start q {}", q);
-
-	for(size_t i = n; i >= (t + 1); i--) {
-		long long q_idx = i - t - 1;
-		uintDouble q_tmp = 0;
-
-		// std::println("{:-^40}", "");
-		// std::println("ITERATION:[[ i: {}, i >= (t+1):{}, q_idx ]]", i, t + 1, q_idx);
-		//
-		// std::println("");
-		// std::println("if(a[i]: {} == b[t]: {}) {{", a.get(i), b.get(t));
-		// std::println("\tq_tmp = {}", (BASE - 1) & mask);
-		// std::println("}} else {{");
-		// std::println("\tq_tmp = {}", ((((uintDouble)a.get(i) << Bits) | a.get(i - 1)) / b.get(t)) & mask);
-		// std::println("}}");
-
-		// uintDouble numerator = (((uintDouble)a.get(i) << Bits) | a.get(i - 1));
-		// uintDouble denumerator = b.get(t);
-		// uintDouble hat_r = 0;
-
-		if(a.get(i) == b.get(t)) {
-			q_tmp = (BASE - 1) & mask;
-			// hat_r = numerator - (q_tmp * denumerator);
-		} else {
-			q_tmp = ((uint)a.get(i) * BASE + a.get(i - 1)) / (uint)b.get(t);
-
-			// q_tmp = ((uint)a.get_safe(i) * (BASE * BASE) + a.get_safe(i - 1) * BASE + a.get_safe(i - 2)) / ((uint)b.get_safe(t) * BASE + b.get_safe(t - 1));
-			// q_tmp = (((uintDouble)a.get_safe(i) << (Bits * 2)) + ((uintDouble)a.get_safe(i - 1) << Bits) + a.get_safe(i - 2)) / ((uint)b.get_safe(t) * BASE + b.get_safe(t - 1));
-
-			// q_tmp = (((uintDouble)a.get_safe(i) << Bits) + a.get_safe(i - 1) + ((uintDouble)a.get_safe(i - 2) >> Bits)) / (b.get_safe(t) + ((uintDouble)b.get_safe(t - 1) >> Bits));
-
-			// q_tmp = (/ b.get(t)) & mask;
-			// q_tmp = numerator / denumerator;
-			// hat_r = numerator % denumerator;
-		}
-		// std::println("q_tmp = {}", q_tmp);
-		// std::println("");
-
-		// uintDouble v2 = b.get_safe(t - 1);
-		// uintDouble u2 = a.get_safe(i - 2);
-		// while(q_tmp * v2 > (hat_r * BASE) + u2) {
-		// 	q_tmp--;
-		// 	hat_r += denumerator;
-		// 	if(hat_r >= BASE) break;
-		// }
-
-		uintDouble lhs = b.get_safe(t) * BASE + b.get_safe(t - 1);
-		// uintDouble lhs = b.get_safe(t) + ((uintDouble)b.get_safe(t - 1) >> Bits);
-		// uintDouble lhs = ((uintDouble)b.get_safe(t) << Bits) | b.get_safe(t - 1);
-		// uintDouble lhs = b.get_safe(t) + (0);
-
-		uintDouble rhs = a.get_safe(i) * (BASE * BASE) + a.get_safe(i - 1) * BASE + a.get_safe(i - 2);
-		// uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + ((uintDouble)a.get_safe(i - 2) >> Bits);
-		// uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + (0);
-
-		// int cnt = 0;
-		// std::println("");
-		// std::println("while(( q_tmp: {} * lhs: {} ): {} > rhs: {}) {{", q_tmp, lhs, (q_tmp * lhs), rhs);
-		while((q_tmp * lhs) > rhs) {
-			q_tmp--;
-			q_tmp &= mask;
-			// 	cnt++;
-		}
-		// std::println("cnt: {}, q_tmp: {}", cnt, q_tmp);
-		// std::println("");
-
-		// BigInt<Bits> rhs = lshift<Bits>(BigInt<Bits>(a.get_safe(i)), 2 * Bits);
-		// rhs = add<Bits>(rhs, ((uintDouble)a.get_safe(i - 1) << Bits));
-		// rhs = add<Bits>(rhs, a.get_safe(i - 2));
-
-		// while(true) {
-		// 	uintDouble q_high = q_tmp * b.get_safe(t);
-		// 	uintDouble q_low = q_tmp * b.get_safe(t - 1);
-		//
-		// 	uint lhs[3];
-		//
-		// 	lhs[2] = (uint)(q_high >> Bits);
-		// 	uintDouble tmp = (q_high & mask) + (q_low >> Bits);
-		// 	lhs[2] += (uint)(tmp >> Bits);
-		// 	lhs[1] = (uint)(tmp & Bits);
-		// 	lhs[0] = (uint)(q_low >> Bits);
-		//
-		// 	uint rhs[3];
-		//
-		// 	rhs[2] = a.get(i);
-		// 	rhs[1] = a.get(i - 1);
-		// 	rhs[0] = a.get(i - 2);
-		//
-		// 	if(lhs[2] < rhs[2]) break;
-		// 	if(lhs[2] > rhs[2]) {
-		// 		q_tmp--;
-		// 		continue;
-		// 	}
-		//
-		// 	if(lhs[0] <= rhs[0]) break;
-		//
-		// 	q_tmp--;
-		// }
-
-		BigInt<Bits> term = lshift(b, q_idx * Bits);
-		// std::println("term: {}, b: {}, q_idx * Bits: {}", term, b, q_idx * Bits);
-
-		BigInt<Bits> prod = mul<Bits>(q_tmp, term);
-		// std::println("prod: {}, q_tmp: {}", prod, q_tmp);
-
-		BigInt<Bits> temp = a;
-		a = sub(a, prod);
-		// std::println("a_before: {}, a: {}", temp, a);
-		// std::println("");
-
-		// if(prod > a) {
-		// 	q_tmp--;
-		// 	q_tmp &= mask;
-		// 	prod = sub(prod, term);
-		// }
-		// a = sub(a, prod);
-
-		if(a.is_negative()) {
-			a.set_sign(false);
-			a = sub(term, a);
-			// std::println("a.is_negative = a {}", a);
-
-			// std::println("BEFORE q_tmp: {}", q_tmp);
-			q_tmp--;
-			q_tmp &= mask;
-			// std::println("AFTER q_tmp: {}", q_tmp);
-		}
-		q.push_bits(q_tmp, q_idx);
-		// std::println("");
-		// std::println("PUSHED to {} val {}", q_idx, q_tmp);
-		// std::println("{:-^40}", "");
-		// std::println("");
-	}
-	// r = std::move(a);
-	// std::println("");
-	r = a;
-	// NORMALIZATION
-	if(shift > 0) {
-		r = rshift(r, shift);
-	}
-	// std::println("DENORMALIZATION r {}", r);
-	return { q, r };
-}
-
-template <size_t Bits>
-std::pair<BigInt<Bits>, BigInt<Bits>> div_fii(BigInt<Bits> a, BigInt<Bits> b)
-{
-	static_assert(Bits <= 64 && "Can't support larger bits sizes");
-	assertm(b.get_chunks() >= 1 && b.get(b.get_chunks() - 1) != 0, "Can't divide by zero");
 
 	using uint = typename SelectIntType_t<Bits>::uint_t;
 	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
 
-	// --- 0. Trivial Cases ---
-	if(a < b) return { BigInt<Bits>(0), a };
-	if(a == b) return { BigInt<Bits>(1), BigInt<Bits>(0) };
+	uintDouble BASE = (uintDouble)1 << Bits;
 
-	// --- 1. Single Chunk Divisor Optimization ---
-	// Knuth Algorithm D requires divisor length > 1.
-	// We must handle single-chunk divisors separately (and it's faster!).
-	if(b.get_chunks() == 1) {
-		uintDouble divisor = b.get(0);
-		uintDouble remainder = 0;
-		BigInt<Bits> q;
-		q.resize(a.get_chunks(), 0);
-
-		// Standard "schoolbook" short division
-		for(int i = a.get_chunks() - 1; i >= 0; i--) {
-			uintDouble cur = ((uintDouble)remainder << Bits) | a.get(i);
-			q.push_bits((uint)(cur / divisor), i);
-			remainder = cur % divisor;
-		}
-		// q.trim(); // Remove leading zeros if your BigInt class supports it
-		BigInt<Bits> r;
-		r.push_bits((uint)remainder);
-		return { q, r };
-	}
-
-	// --- 2. Normalization (Algorithm D Step D1) ---
+	// NORMALIZATION
 	uint top_chunk = b.get(b.get_chunks() - 1);
 	size_t shift = 0;
+
 	while(((top_chunk >> (Bits - 1 - shift)) & 1) == 0) {
 		shift++;
 	}
@@ -376,104 +162,75 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div_fii(BigInt<Bits> a, BigInt<Bits> b)
 		b = lshift(b, shift);
 	}
 
-	// We effectively extended 'a' by shifting.
-	// Ideally, Algorithm D expects u[m+n]...u[0].
-	// We ensure we can access indices safely by relying on get_safe returning 0.
-
 	size_t n = a.get_chunks() - 1;
-	size_t t = b.get_chunks() - 1; // t is divisor MSB index
-
-	// Safety check after normalization (in case a grew or b didn't)
-	if(a < b) {
-		if(shift > 0) a = rshift(a, shift);
-		return { BigInt<Bits>(0), a };
-	}
+	size_t t = b.get_chunks() - 1;
 
 	BigInt<Bits> q;
-	q.resize(n - t + 1, 0);
+	q.resize((n - t + 1), 0);
 
-	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
-	uintDouble BASE = (uintDouble)1 << Bits;
+	BigInt<Bits> bb_nt = lshift(b, Bits * (n - t));
+	uint q_val = q.get(n - t);
 
-	// --- 3. Main Loop (Step D2) ---
-	// We loop from n down to t.
-	// Loop condition must include 't' to handle the case where len(a) == len(b).
-	for(size_t i = n; i >= t; i--) {
-		size_t q_idx = i - t; // Quotient index matches difference in position
+	while(a >= bb_nt) {
+		q_val++;
+		a = sub(a, bb_nt);
+	}
+	q.push_bits(q_val, n - t);
 
-		// --- D3. Estimate q_hat ---
-		// Numerator is top 2 digits of current window: (u[i] * B + u[i-1])
-		// If i=n and a was not extended, a[i] might be small or 0?
-		// Actually, with lshift, a[n] is valid.
+	for(size_t i = n; i >= (t + 1); i--) {
+		int64_t q_idx = i - t - 1;
+		uint q_tmp = 0;
+		uintDouble r_tmp = 0;
 
-		uintDouble q_hat = 0;
-		uintDouble r_hat = 0;
+		uintDouble numer = ((uintDouble)a.get_safe(i) << Bits) + a.get_safe(i - 1);
+		uintDouble denumer = b.get(t);
 
-		// Use get_safe to handle i-1 < 0 gracefully (though with t>=1 this shouldn't trigger for i-1)
-		uintDouble u_i = a.get_safe(i);
-		uintDouble u_i_1 = a.get_safe(i - 1);
-		uintDouble v_t = b.get_safe(t);
-
-		uintDouble numerator = (u_i << Bits) | u_i_1;
-
-		// If the top digits match, the estimate is BASE-1
-		if(u_i == v_t) {
-			q_hat = mask;
-			r_hat = numerator - (q_hat * v_t);
+		if(a.get_safe(i) == b.get(t)) {
+			q_tmp = BASE - 1;
+			r_tmp = numer - ((uintDouble)q_tmp * denumer);
 		} else {
-			q_hat = numerator / v_t;
-			r_hat = numerator % v_t;
+			q_tmp = (uint)(numer / denumer);
+			r_tmp = numer % denumer;
 		}
 
-		// --- Refine q_hat ---
-		// Check: q_hat * v[t-1] > (r_hat * B + u[i-2])
-		uintDouble v_t_1 = b.get_safe(t - 1);
-		uintDouble u_i_2 = a.get_safe(i - 2); // get_safe returns 0 if index < 0
-
-		while(true) {
-			if(r_hat >= BASE) break; // Term on right is massive, inequality fails
-
-			if((q_hat * v_t_1) > ((r_hat << Bits) | u_i_2)) {
-				q_hat--;
-				r_hat += v_t;
-			} else {
-				break;
-			}
+		while((b.get_safe(t - 1) * q_tmp) > ((r_tmp << Bits) + a.get_safe(i - 2))) {
+			q_tmp--;
+			r_tmp += denumer;
+			if(r_tmp >= BASE) break;
 		}
 
-		// --- D4. Multiply and Subtract ---
-		// a -= q_hat * (b << (q_idx * Bits))
+		// uintDouble lhs = ((uintDouble)b.get(t) << Bits) + b.get_safe(t - 1);
+		// uintDouble rhs = ((uintDouble)a.get(i) * (BASE * BASE)) + ((uintDouble)a.get_safe(i - 1) << Bits) + a.get_safe(i - 2);
 
-		BigInt<Bits> term = lshift(b, q_idx * Bits);
-		BigInt<Bits> prod = mul<Bits>(q_hat, term);
+		// uintDouble lhs = b.get_safe(t) + (0);
+		// uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + (0);
+		//
+		// while((q_tmp * lhs) > rhs) {
+		// 	q_tmp--;
+		// }
 
-		bool borrow = false;
-		if(prod > a) borrow = true;
+		BigInt<Bits> term = lshift(b, Bits * q_idx);
+		BigInt<Bits> prod = mul<Bits>(q_tmp, term);
 		a = sub(a, prod);
 
-		// --- D5 & D6. Test Remainder and Add Back ---
-		if(borrow) {
-			q_hat--;
+		if(a.is_negative()) {
 			a.set_sign(false);
-			a = sub(term, a); // Correction
+			a = sub(term, a);
+
+			q_tmp--;
 		}
 
-		q.push_bits((uint)q_hat, q_idx);
-
-		// Prevent unsigned underflow in loop
-		if(i == 0) break;
+		q.push_bits(q_tmp, q_idx);
 	}
 
-	// --- D8. Unnormalize ---
 	if(shift > 0) {
 		a = rshift(a, shift);
 	}
 
-	// Optional: Trim result vectors
-	// q.trim();
-	// a.trim();
+	q.set_sign(a_sign != b_sign);
+	a.set_sign(a_sign);
 
-	return { q, a };
+	return { q, a /* remainder */ };
 }
 
 template <size_t Bits>
