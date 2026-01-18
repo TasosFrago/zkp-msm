@@ -1,19 +1,27 @@
 #pragma once
 
-#include <algorithm>
+/**
+ * @file big_arth.hpp
+ * @brief Arithmetic and bitwise operations for the bga::BigInt class.
+ */
+
 #include <cassert>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <print>
-#include <sys/types.h>
 
 #include "bigint.hpp"
 
 namespace bga
 {
 
+/**
+ * @brief Performs addition of two non-negative BigInts.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The first operand.
+ * @param b The second operand.
+ * @return A new BigInt representing the sum of a and b.
+ * @note This function asserts that both inputs are non-negative.
+ */
 template <size_t Bits>
 BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b)
 {
@@ -39,6 +47,14 @@ BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b)
 	return W;
 }
 
+/**
+ * @brief Performs subtraction of two BigInts.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The first operand (minuend).
+ * @param b The second operand (subtrahend).
+ * @return A new BigInt representing (a - b).
+ * @note Correctly handles signs and negative results using borrow logic.
+ */
 template <size_t Bits>
 BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b)
 {
@@ -78,6 +94,13 @@ BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b)
 	return W;
 }
 
+/**
+ * @brief Performs multiplication of two BigInts.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The first factor.
+ * @param b The second factor.
+ * @return A new BigInt representing the product of a and b.
+ */
 template <size_t Bits>
 BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b)
 {
@@ -122,6 +145,14 @@ BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b)
 	return W;
 }
 
+/**
+ * @brief Performs division of two BigInts.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The dividend.
+ * @param b The divisor.
+ * @return A pair containing {Quotient, Remainder}.
+ * @note Implements division with normalization and quotient estimation.
+ */
 template <size_t Bits>
 std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 {
@@ -206,7 +237,7 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 		// uintDouble rhs = a.get_safe(i) * BASE + a.get_safe(i - 1) + (0);
 		//
 		// while((q_tmp * lhs) > rhs) {
-		// 	q_tmp--;
+		//      q_tmp--;
 		// }
 
 		BigInt<Bits> term = lshift(b, Bits * q_idx);
@@ -233,6 +264,13 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 	return { q, a /* remainder */ };
 }
 
+/**
+ * @brief Performs a logical left shift on a BigInt.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The source BigInt.
+ * @param shift The number of bits to shift.
+ * @return A new BigInt representing (a << shift).
+ */
 template <size_t Bits>
 BigInt<Bits> lshift(BigInt<Bits> a, size_t shift) /* a << shift */
 {
@@ -272,6 +310,13 @@ BigInt<Bits> lshift(BigInt<Bits> a, size_t shift) /* a << shift */
 	return W;
 }
 
+/**
+ * @brief Performs a logical right shift on a BigInt.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The source BigInt.
+ * @param shift The number of bits to shift.
+ * @return A new BigInt representing (a >> shift).
+ */
 template <size_t Bits>
 BigInt<Bits> rshift(BigInt<Bits> a, size_t shift) /* a >> shift */
 {
@@ -312,12 +357,21 @@ BigInt<Bits> rshift(BigInt<Bits> a, size_t shift) /* a >> shift */
 	return W;
 }
 
+/**
+ * @enum BitW_2op
+ * @brief Bitwise operator selection for internal use.
+ */
 enum class BitW_2op {
 	AND,
 	OR,
 	XOR
 };
 
+/**
+ * @brief Internal helper to execute bitwise operations (AND, OR, XOR).
+ * @tparam Bits Number of bits per chunk.
+ * @tparam op The operation to perform.
+ */
 template <size_t Bits, BitW_2op op>
 BigInt<Bits> bitwise_2op(BigInt<Bits> a, BigInt<Bits> b)
 {
@@ -346,24 +400,30 @@ BigInt<Bits> bitwise_2op(BigInt<Bits> a, BigInt<Bits> b)
 	return W;
 }
 
+/** @brief Performs bitwise AND. */
 template <size_t Bits>
 BigInt<Bits> AND(BigInt<Bits> a, BigInt<Bits> b)
 {
 	return bitwise_2op<Bits, BitW_2op::AND>(a, b);
 }
 
+/** @brief Performs bitwise OR. */
 template <size_t Bits>
 BigInt<Bits> OR(BigInt<Bits> a, BigInt<Bits> b)
 {
 	return bitwise_2op<Bits, BitW_2op::OR>(a, b);
 }
 
+/** @brief Performs bitwise XOR. */
 template <size_t Bits>
 BigInt<Bits> XOR(BigInt<Bits> a, BigInt<Bits> b)
 {
 	return bitwise_2op<Bits, BitW_2op::XOR>(a, b);
 }
 
+/**
+ * @brief Performs bitwise NOT on a non-negative BigInt.
+ */
 template <size_t Bits>
 BigInt<Bits> NOT(BigInt<Bits> a)
 {
@@ -384,6 +444,9 @@ BigInt<Bits> NOT(BigInt<Bits> a)
 	return W;
 }
 
+/**
+ * @brief Performs two's complement-style negation on a BigInt.
+ */
 template <size_t Bits>
 BigInt<Bits> NOT_signed(BigInt<Bits> a)
 {
@@ -421,6 +484,9 @@ BigInt<Bits> NOT_signed(BigInt<Bits> a)
 	return W;
 }
 
+/**
+ * @brief Increments a BigInt in-place.
+ */
 template <size_t Bits>
 void inc(BigInt<Bits> &a)
 {
@@ -441,6 +507,9 @@ void inc(BigInt<Bits> &a)
 	} while(carry != 0 && idx < a.get_chunks());
 }
 
+/**
+ * @brief Decrements a BigInt in-place.
+ */
 template <size_t Bits>
 void dec(BigInt<Bits> &a)
 {

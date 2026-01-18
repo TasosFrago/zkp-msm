@@ -1,15 +1,32 @@
 #pragma once
 
+/**
+ * @file mod_arth.hpp
+ * @brief Modular arithmetic and Montgomery multiplication implementations.
+ */
+
 #include "big_arth.hpp"
 #include "bigint.hpp"
 #include <ostream>
 #include <print>
 #include <utility>
 
+/**
+ * @namespace mda
+ * @brief Modular Data Architecture - Contains modular arithmetic logic and Montgomery structures.
+ */
 namespace mda
 {
 using bga::BigInt;
 
+/**
+ * @brief Performs the modulo operation (a mod q).
+ * @tparam Bits Number of bits per chunk.
+ * @param a The dividend.
+ * @param q The modulus (must be positive).
+ * @return BigInt<Bits> representing (a mod q).
+ * @note Correctly handles negative values for 'a' by adding 'q' to the remainder.
+ */
 template <size_t Bits>
 BigInt<Bits> mod(BigInt<Bits> a, BigInt<Bits> q)
 {
@@ -32,6 +49,14 @@ BigInt<Bits> mod(BigInt<Bits> a, BigInt<Bits> q)
 	return a;
 }
 
+/**
+ * @brief Performs modular addition (a + b mod q).
+ * @tparam Bits Number of bits per chunk.
+ * @param a The first operand (must be < q).
+ * @param b The second operand (must be < q).
+ * @param q The modulus.
+ * @return BigInt<Bits> representing (a + b mod q).
+ */
 template <size_t Bits>
 BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 {
@@ -48,6 +73,14 @@ BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 	return W;
 }
 
+/**
+ * @brief Performs modular subtraction (a - b mod q).
+ * @tparam Bits Number of bits per chunk.
+ * @param a The minuend (must be < q).
+ * @param b The subtrahend (must be < q).
+ * @param q The modulus.
+ * @return BigInt<Bits> representing (a - b mod q).
+ */
 template <size_t Bits>
 BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 {
@@ -64,26 +97,40 @@ BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 	std::unreachable();
 }
 
+/**
+ * @enum MONT_ALGO
+ * @brief Available Montgomery Multiplication algorithms.
+ */
 enum class MONT_ALGO {
-	SOS = 0,
-	CIOS,
-	FIOS
+	SOS = 0, ///< Separated Operand Scanning
+	CIOS,	 ///< Coarsely Integrated Operand Scanning
+	FIOS	 ///< Finely Integrated Operand Scanning
 };
 
+/**
+ * @struct Montgomery
+ * @brief Context for performing Montgomery Multiplication and reduction.
+ * * Montgomery multiplication allows for efficient modular multiplication without trial division.
+ * * @tparam Bits Number of bits per chunk.
+ * @tparam algo The Montgomery algorithm variant to use (SOS, CIOS, or FIOS).
+ */
 template <size_t Bits, MONT_ALGO algo = MONT_ALGO::SOS>
 struct Montgomery {
 	using bgint = bga::bgint<Bits>;
 	using uint = bga::SelectIntType_t<Bits>::uint_t;
 	using uintDouble = bga::SelectIntType_t<Bits>::uintd_t;
 
-	bgint n;
-	uint n_p;
-	bgint r2;
+	bgint n;  ///< The modulus.
+	uint n_p; ///< Montgomery constant n' = -n^-1 mod W.
+	bgint r2; ///< Precomputed value R^2 mod n.
 
-	size_t n_chunks;
-	size_t total_bits;
+	size_t n_chunks;   ///< Number of chunks in the modulus.
+	size_t total_bits; ///< Total bit width (n_chunks * Bits).
 
 private:
+	/**
+	 * @brief Calculates the Montgomery constant n' using Newton's method.
+	 */
 	static uint calc_n_p(uint n0)
 	{
 		// n0 &= mask;
@@ -101,6 +148,9 @@ private:
 		return (uint)((-x) & mask);
 	}
 
+	/**
+	 * @brief Precomputes R^2 mod n.
+	 */
 	bgint calc_r2() const
 	{
 		bgint x(1);
@@ -116,6 +166,10 @@ private:
 	}
 
 public:
+	/**
+	 * @brief Constructs a Montgomery context and precomputes necessary constants.
+	 * @param modulus The modular base (must be positive and odd).
+	 */
 	Montgomery(bgint modulus)
 	    : n(std::move(modulus)), n_chunks(n.get_chunks()),
 	      total_bits(n_chunks * Bits)
@@ -128,11 +182,13 @@ public:
 		r2 = calc_r2();
 	}
 
+	/** @brief Transforms a standard integer into the Montgomery domain (xR mod n). */
 	bgint init(bgint x)
 	{
 		return mul(x, r2);
 	}
 
+	/** @brief Performs Montgomery Multiplication (abR^-1 mod n). */
 	bgint mul(bgint a, bgint b)
 	{
 		if constexpr(algo == MONT_ALGO::SOS) {
@@ -144,12 +200,16 @@ public:
 		}
 	}
 
+	/** @brief Transforms a Montgomery domain integer back to the standard domain. */
 	bgint trans_back(bgint x)
 	{
 		bgint one(1);
 		return mul(x, one);
 	}
 
+	/**
+	 * @brief Separated Operand Scanning (SOS) Reduction.
+	 */
 	bgint reduce_sos(bgint t)
 	{
 		/*
@@ -181,11 +241,15 @@ public:
 		return (t >= n) ? bga::sub(t, n) : t;
 	}
 
+	/** @brief SOS Multiplication implementation. */
 	bgint mul_sos(bgint a, bgint b)
 	{
 		return reduce_sos(bga::mul(a, b));
 	}
 
+	/**
+	 * @brief Coarsely Integrated Operand Scanning (CIOS) Multiplication.
+	 */
 	bgint mul_cios(bgint a, bgint b)
 	{
 		/*
@@ -252,6 +316,9 @@ public:
 		return (t >= n) ? bga::sub(t, n) : t;
 	}
 
+	/**
+	 * @brief Finely Integrated Operand Scanning (FIOS) Multiplication.
+	 */
 	bgint mul_fios(bgint a, bgint b)
 	{
 		/*
@@ -354,6 +421,15 @@ public:
 	}
 };
 
+/**
+ * @brief Performs modular multiplication (ab mod q) using Montgomery multiplication.
+ * @tparam Bits Number of bits per chunk.
+ * @tparam algo The Montgomery algorithm variant to use.
+ * @param a The first operand.
+ * @param b The second operand.
+ * @param q The modulus.
+ * @return BigInt<Bits> representing (ab mod q).
+ */
 template <size_t Bits, MONT_ALGO algo>
 BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 {

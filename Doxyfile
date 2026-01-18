@@ -1,0 +1,53 @@
+# --- Project Info ---
+PROJECT_NAME           = "BGA BigInt Library"
+PROJECT_NUMBER         = 1.0.0
+OUTPUT_DIRECTORY       = docs
+CREATE_SUBDIRECTORIES  = YES
+OUTPUT_LANGUAGE        = English
+BUILTIN_STL_SUPPORT    = YES
+
+# --- Input Configuration ---
+# This assumes your .hpp files are in the current directory
+INPUT                  = .
+FILE_PATTERNS          = *.hpp *.cpp *.h
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */tests/* */benchmarks/*
+
+# --- Parsing Configuration (Modern C++) ---
+# This ensures Doxygen understands C++20/23 features
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+SEARCH_INCLUDES        = YES
+# We "trick" Doxygen into treating __int128 as a standard type
+PREDEFINED             = __int128_t="long long" \
+                         __uint128_t="unsigned long long" \
+                         __attribute__(x)= \
+                         assertm(x,y,...)=
+
+# --- Extraction Settings ---
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+GENERATE_TODOLIST      = YES
+
+# --- HTML Output Settings ---
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_FILE_EXTENSION    = .html
+# Set this to YES if you want a search bar in your docs
+SEARCHENGINE           = YES
+
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+GENERATE_MARKDOWN      = YES
+
+# --- Modern Visuals ---
+# Use the built-in navigation tree on the left
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_PATH_NAMES        = NO
+
+# --- LaTeX/PDF Output ---
+# Usually set to NO unless you specifically need a PDF manual
+GENERATE_LATEX         = NO

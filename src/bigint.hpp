@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file bigint.hpp
+ * @brief A template-based arbitrary-precision integer library with configurable radix.
+ */
+
 #include <cassert>
 #include <compare>
 #include <cstddef>
@@ -12,6 +17,13 @@
 #ifndef NDEBUG
 #include <source_location>
 
+/**
+ * @brief Custom assertion macro providing source location and formatted messages.
+ * * Only active when NDEBUG is not defined.
+ * @param expr The expression to evaluate.
+ * @param msg The format string for the error message.
+ * @param ... Additional arguments for the format string.
+ */
 #define assertm(expr, msg, ...)                                                                       \
 	do {                                                                                          \
 		if(!(expr)) {                                                                         \
@@ -29,9 +41,17 @@
 	} while(0)
 #endif
 
+/**
+ * @namespace bga
+ * @brief BigInt General Architecture - Contains the core BigInt implementation and type traits.
+ */
 namespace bga
 {
 
+/**
+ * @brief Internal macro to define function templates for selecting integer types.
+ * @internal
+ */
 #define SelectIntType(name, type8, type16, type32, type64)                              \
 	template <size_t Bits>                                                          \
 	constexpr auto name()                                                           \
@@ -53,17 +73,30 @@ SelectIntType(SelectUIntDoubleType_fn, uint16_t, uint32_t, uint64_t, __uint128_t
 SelectIntType(SelectIntType_fn, int8_t, int16_t, int32_t, int64_t);
 SelectIntType(SelectIntDoubleType_fn, int16_t, int32_t, int64_t, __int128_t);
 
+/**
+ * @struct SelectIntType_t
+ * @brief Compile-time trait to determine the optimal underlying types for a given bit width.
+ * @tparam Bits The number of bits requested per chunk.
+ */
 template <size_t Bits>
 struct SelectIntType_t {
-	using uint_t = decltype(SelectUIntType_fn<Bits>());
-	using uintd_t = decltype(SelectUIntDoubleType_fn<Bits>());
+	using uint_t = decltype(SelectUIntType_fn<Bits>());	   ///< Unsigned storage type.
+	using uintd_t = decltype(SelectUIntDoubleType_fn<Bits>()); ///< Unsigned type for intermediate double-width calculations.
 
-	using int_t = decltype(SelectIntType_fn<Bits>());
-	using intd_t = decltype(SelectIntDoubleType_fn<Bits>());
+	using int_t = decltype(SelectIntType_fn<Bits>());	 ///< Signed storage type.
+	using intd_t = decltype(SelectIntDoubleType_fn<Bits>()); ///< Signed type for intermediate double-width calculations.
 };
 
+/**
+ * @namespace SelectIntType_dbg
+ * @brief Utilities for debugging the type selection system.
+ */
 namespace SelectIntType_dbg
 {
+/**
+ * @brief Returns a string representation of a type name at compile time.
+ * @tparam T The type to inspect.
+ */
 template <typename T>
 constexpr std::string_view type_name()
 {
@@ -89,6 +122,9 @@ constexpr std::string_view type_name()
 	return function.substr(start, end - start);
 }
 
+/**
+ * @brief Recursive template to print all selected types for bit widths doubling from 1 to 64.
+ */
 template <size_t Bits>
 void debug_loop()
 {
@@ -105,6 +141,12 @@ void debug_loop()
 }
 }; // namespace SelectIntType_dbg
 
+/**
+ * @class BigInt
+ * @brief An arbitrary-precision integer class with a configurable radix (bit width per chunk).
+ * * The class stores data in a Little-Endian format where radix[0] is the least significant chunk.
+ * * @tparam Bits The number of bits per internal "digit" or chunk. Valid range [1, 64].
+ */
 template <size_t Bits>
 class BigInt
 {
@@ -112,14 +154,18 @@ private:
 	using T = typename SelectIntType_t<Bits>::uint_t;
 	using T_double = typename SelectIntType_t<Bits>::uintd_t;
 
-	// Returns vector with chuncs from LSB to MSB
-	std::vector<T> radix;
-	// size_t chunks = 0;
-	size_t bits;
-	bool m_is_negative;
+	std::vector<T> radix; ///< Internal storage of integer chunks.
+	size_t bits;	      ///< The bit width of each chunk (constant Bits).
+	bool m_is_negative;   ///< Flag indicating if the number is negative.
 
-	std::string decimal_repr;
+	std::string decimal_repr; ///< Internal cache for decimal representation (optional usage).
 
+	/**
+	 * @brief Divides a decimal string by 2 and returns the remainder.
+	 * Used primarily for string-to-binary conversion.
+	 * @param num The decimal string to be divided (modified in place).
+	 * @return The remainder (0 or 1).
+	 */
 	static int devideStrBy2(std::string &num)
 	{
 		int remainder = 0;
@@ -135,19 +181,32 @@ private:
 		return remainder;
 	}
 
+	/**
+	 * @brief Converts a hex character to its integer value.
+	 * @param c The hex character ('0'-'9', 'A'-'F', 'a'-'f').
+	 * @return The 8-bit integer value.
+	 */
 	constexpr static uint8_t hexCharToInt(char c)
 	{
 		if(c >= '0' && c <= '9') return c - '0';
 		if(c >= 'A' && c <= 'F') return c - 'A' + 10;
 		if(c >= 'a' && c <= 'f') return c - 'a' + 10;
 		assertm(false, "Invalid argument given to function");
+		return 0;
 	}
 
 public:
+	/**
+	 * @brief Default constructor. Initializes the value to 0.
+	 */
 	BigInt() : bits(Bits), m_is_negative(false)
 	{
 	}
 
+	/**
+	 * @brief Constructs a BigInt from a 128-bit integer.
+	 * @param n The source 128-bit value.
+	 */
 	BigInt(__int128_t n) : bits(Bits)
 	{
 		uint64_t value;
@@ -171,15 +230,19 @@ public:
 		} while(value != 0);
 	}
 
+	/**
+	 * @brief Constructs a BigInt from a string (Decimal or Hex).
+	 * Supports "0x" prefix for hexadecimal values.
+	 * @param a The string representation of the number.
+	 */
 	BigInt(std::string a) : bits(Bits), decimal_repr(a)
 	{
-		// chunks = 0;
 		std::vector<bool> bitArray;
 
 		m_is_negative = (a[0] == '-');
 		if(m_is_negative) a.erase(0, 1); // remove sign
 
-		if(a[0] == '0' && a[1] == 'x') {
+		if(a.size() >= 2 && a[0] == '0' && a[1] == 'x') {
 			a.erase(0, 2); // remove the 0x prefix
 
 			for(int64_t i = a.size() - 1; i >= 0; i--) {
@@ -215,18 +278,11 @@ public:
 				}
 			}
 			radix.push_back(chunkValue);
-			// chunks++;
-			// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 		}
 	}
 
-	void push_bits(T num)
-	{
-		radix.push_back(num);
-		// chunks++;
-		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
-	}
-
+	/** @name Data Access and Iterators */
+	///@{
 	using iterator = std::vector<T>::iterator;
 	using const_iterator = std::vector<T>::const_iterator;
 	iterator begin()
@@ -238,66 +294,76 @@ public:
 		return radix.end();
 	}
 
+	/** @brief Appends a new chunk to the most significant position. */
+	void push_bits(T num)
+	{
+		radix.push_back(num);
+	}
+
+	/** @brief Inserts chunks into the internal storage. */
 	template <typename InputIt>
 	iterator insert(const_iterator pos, InputIt first, InputIt last)
 	{
-		auto res = radix.insert(pos, first, last);
-		// chunks = radix.size();
-		return res;
+		return radix.insert(pos, first, last);
 	}
 
+	/** @brief Sets the value of a specific chunk. */
 	void push_bits(T num, size_t idx)
 	{
 		radix[idx] = num;
 	}
 
+	/** @brief Reserves memory for the internal chunk vector. */
 	void reserve(size_t n)
 	{
 		radix.reserve(n);
 	}
 
+	/** @brief Resizes the internal chunk vector. */
 	void resize(size_t n)
 	{
 		radix.resize(n);
-		// chunks = radix.size();
-		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
+	/** @brief Resizes the internal chunk vector and fills with a value. */
 	void resize(size_t n, size_t num)
 	{
 		radix.resize(n, num);
-		// std::println("radix size {}", radix.size());
-		// chunks += n;
-		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
+	/** @brief Returns a reference to the internal vector. */
 	std::vector<T> &get()
 	{
 		return radix;
 	}
 
+	/** @brief Returns a copy of the internal vector. */
 	std::vector<T> get() const
 	{
 		return radix;
 	}
 
+	/** @brief Gets a chunk at idx with assertion checking. */
 	T get(size_t idx) const
 	{
-		assertm(idx < radix.size(), "Failed to get with idx being {}", idx);
+		assertm(idx < radix.size(), "Index out of bounds. idx: {}", idx);
 		return radix[idx];
 	}
 
+	/** @brief Gets a mutable chunk at idx with assertion checking. */
 	T &get(size_t idx)
 	{
-		assertm(idx < radix.size(), "Failed to get with idx being {}", idx);
+		assertm(idx < radix.size(), "Index out of bounds. idx: {}", idx);
 		return radix[idx];
 	}
 
+	/** @brief Gets a chunk safely; returns 0 if out of bounds. */
 	T get_safe(size_t idx) const
 	{
 		return (idx < radix.size()) ? radix[idx] : 0;
 	}
 
+	/** @brief Returns a vector of chunks from MSB to LSB. */
 	std::vector<T> get_reversed() const
 	{
 		std::vector<T> tmp;
@@ -306,7 +372,10 @@ public:
 		}
 		return tmp;
 	}
+	///@}
 
+	/** @name Metadata and Sign */
+	///@{
 	size_t get_bits() const
 	{
 		return bits;
@@ -319,12 +388,15 @@ public:
 	{
 		return m_is_negative;
 	}
-
 	void set_sign(bool is_negative)
 	{
 		m_is_negative = is_negative;
 	}
+	///@}
 
+	/**
+	 * @brief Checks if the number is numerically zero.
+	 */
 	bool is_zero() const
 	{
 		if(radix.size() == 0) return true;
@@ -334,43 +406,41 @@ public:
 		return true;
 	}
 
+	/**
+	 * @brief Trims leading zero chunks from the internal storage.
+	 */
 	void trim()
 	{
 		while(radix.size() > 1 && radix.back() == 0) {
 			radix.pop_back();
-			// chunks--;
 		}
-		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
 	}
 
+	/**
+	 * @brief Returns the number of chunks required to represent the number (ignoring leading zeros).
+	 */
 	size_t effective_size() const
 	{
 		size_t s = radix.size();
-		// assertm(chunks == radix.size(), "chunks: {}, size: {}", chunks, radix.size());
-		// std::println("s {}, s - 1: {}, radix[s-1] {}", s, s - 1, radix[s - 1]);
 		while(s > 0 && radix[s - 1] == 0) {
 			s--;
 		}
 		return s;
 	}
 
+	/** @name Operators */
+	///@{
 	bool operator==(const BigInt<Bits> &other) const
 	{
 		size_t a_chunks = this->effective_size();
 		size_t b_chunks = other.effective_size();
 
-		// if(a_chunks == 0 && b_chunks == 0) return true;
 		if(a_chunks != b_chunks) return false;
-
 		if(a_chunks == 0) return true;
-		if(a_chunks == 1 && radix[0] == 0 && other.get(0) == 0) return true;
-
 		if(m_is_negative != other.is_negative()) return false;
 
 		for(size_t i = 0; i < a_chunks; i++) {
-			if(radix[i] != other.get(i)) {
-				return false;
-			}
+			if(radix[i] != other.get(i)) return false;
 		}
 		return true;
 	}
@@ -401,45 +471,37 @@ public:
 
 		return m_is_negative ? (0 <=> res) : res;
 	}
+	///@}
 
+	/** @name DEBUG Printing Utilities */
+	///@{
 	__attribute__((noinline, used)) void printme()
 	{
 		std::println("{}", (*this));
 	}
-
 	__attribute__((noinline, used)) std::string str()
 	{
 		return std::format("{}", (*this));
 	}
-
-	__attribute__((noinline, used)) void print_all()
-	{
-		std::println("Dec:\t{}", (*this));
-		std::println("Bin:\t{:b}", (*this));
-		std::println("Hex:\t{:x}", (*this));
-		std::println("MSB:\t{:msb}", (*this));
-		std::println("LSB:\t{:lsb}", (*this));
-	}
-	void print_all(const char *name)
-	{
-		std::println("Num {}:", name);
-		std::println("\tDec:\t{}", (*this));
-		std::println("\tBin:\t{:b}", (*this));
-		std::println("\tHex:\t{:x}", (*this));
-		std::println("\tMSB:\t{:msb}", (*this));
-		std::println("\tLSB:\t{:lsb}", (*this));
-	}
+	__attribute__((noinline, used)) void print_all();
+	void print_all(const char *name);
+	///@}
 };
 
+/**
+ * @brief Utility alias for BigInt.
+ */
 template <size_t Bits>
 using bgint = BigInt<Bits>;
 
+/**
+ * @brief Pads two BigInts with leading zero chunks so they have the same size.
+ */
 template <size_t Bits>
 void pad_BigInts(BigInt<Bits> &a, BigInt<Bits> &b)
 {
-	if(a.get_chunks() == b.get_chunks()) {
-		return;
-	}
+	if(a.get_chunks() == b.get_chunks()) return;
+
 	BigInt<Bits> &needsPad = (a.get_chunks() > b.get_chunks()) ? b : a;
 	uint32_t padding = (a.get_chunks() > b.get_chunks()) ? (a.get_chunks() - b.get_chunks()) : (b.get_chunks() - a.get_chunks());
 
@@ -450,6 +512,15 @@ void pad_BigInts(BigInt<Bits> &a, BigInt<Bits> &b)
 
 } // namespace bga
 
+/**
+ * @brief Custom std::formatter for BigInt.
+ * * Supports:
+ * - `{}`: Decimal
+ * - `{:b}`: Binary
+ * - `{:x}`: Hexadecimal
+ * - `{:lsb}`: Binary chunks from LSB to MSB
+ * - `{:msb}`: Binary chunks from MSB to LSB
+ */
 template <size_t Bits>
 struct std::formatter<bga::BigInt<Bits>> {
 private:
@@ -463,6 +534,9 @@ private:
 			    CHUNKS_MSB };
 	Format format_spec = Format::DECIMAL;
 
+	/**
+	 * @brief Precomputed power of 10 to speed up decimal conversion.
+	 */
 	struct PowerOf10 {
 		static constexpr auto data = []() consteval {
 			T val = 1;
@@ -505,12 +579,10 @@ private:
 		return static_cast<T>(remainder);
 	}
 
-	// Helper: Checks if a vector<T> is all zero
 	static bool isVecZero(const std::vector<T> &num)
 	{
-		for(T chunk : num) {
+		for(T chunk : num)
 			if(chunk != 0) return false;
-		}
 		return true;
 	}
 
@@ -522,10 +594,7 @@ public:
 		auto it = ctx.begin();
 		auto end = ctx.end();
 
-		if(it != end && *it == ':') {
-			++it;
-		}
-
+		if(it != end && *it == ':') ++it;
 		if(it != end && *it != '}') {
 			// Check the first character after ':'
 			if(*it == 'b') {
@@ -557,10 +626,7 @@ public:
 	auto format(const bga::BigInt<Bits> &num, std::format_context &ctx) const
 	{
 		auto out = ctx.out();
-
-		if(isVecZero(num.get())) {
-			return std::format_to(out, "0");
-		}
+		if(num.is_zero()) return std::format_to(out, "0");
 
 		const auto &num_radix = num.get();
 		const size_t chunk_bits = num.get_bits();
@@ -571,39 +637,13 @@ public:
 		// --- Decimal Logic ---
 		case Format::DECIMAL: {
 			std::vector<T> tempRadix = num_radix;
-
-			// size_t max_digits = (num_radix.size() * chunk_bits * 30103) / 100000 + 2;
-
-			// std::string result;
-			// result.reserve(max_digits);
-
 			std::vector<T> parts;
 			parts.reserve(num_radix.size());
 
 			while(!isVecZero(tempRadix)) {
-				// T part = divideVecByBase(tempRadix, chunk_bits, PowerOf10::value);
 				parts.push_back(divideVecByBase(tempRadix, chunk_bits, PowerOf10::value));
-
-				// char buff[PowerOf10::digits];
-				// for(int i = PowerOf10::digits - 1; i >= 0; --i) {
-				// 	buff[i] = '0' + (part % 10);
-				// 	part /= 10;
-				// }
-				// result.append(buff, PowerOf10::digits);
 			}
-
-			// size_t first_nonzero = result.find_first_not_of('0');
-			// if(first_nonzero != std::string::npos) {
-			// 	result.erase(0, first_nonzero);
-			// } else {
-			// 	result = "0";
-			// }
-
-			if(is_negative) {
-				// result.insert(0, "-");
-				out = std::format_to(out, "-");
-			}
-
+			if(is_negative) out = std::format_to(out, "-");
 			auto it = parts.rbegin();
 			out = std::format_to(out, "{}", *it);
 			++it;
@@ -619,10 +659,7 @@ public:
 				}
 				buff[PowerOf10::digits] = '\0';
 				out = std::format_to(out, "{}", buff);
-				// out = std::vformat_to(out, std::string_view(fmt_str), std::make_format_args(*it));
 			}
-			// std::reverse(result.begin() + (is_negative ? 1 : 0), result.end());
-			// return std::format_to(out, "{}", result);
 			return out;
 		}
 
@@ -664,9 +701,7 @@ public:
 					}
 				}
 			}
-			if(leadingZeros) {
-				out = std::format_to(out, "0");
-			}
+			if(leadingZeros) out = std::format_to(out, "0");
 			return out;
 		}
 
@@ -675,10 +710,8 @@ public:
 			out = std::format_to(out, "[LSB] ");
 			if(is_negative) out = std::format_to(out, "-");
 			for(const T &chunk : num_radix) {
-				// Print each chunk as binary with leading zeros
 				for(int b = chunk_bits - 1; b >= 0; b--) {
-					bool bit = (chunk >> b) & 1;
-					out = std::format_to(out, "{}", (bit ? '1' : '0'));
+					out = std::format_to(out, "{}", ((chunk >> b) & 1 ? '1' : '0'));
 				}
 				out = std::format_to(out, " ");
 			}
@@ -692,8 +725,7 @@ public:
 			for(auto it = num_radix.rbegin(); it != num_radix.rend(); ++it) {
 				// Print each chunk as binary with leading zeros
 				for(int b = chunk_bits - 1; b >= 0; b--) {
-					bool bit = (*it >> b) & 1;
-					out = std::format_to(out, "{}", (bit ? '1' : '0'));
+					out = std::format_to(out, "{}", ((*it >> b) & 1 ? '1' : '0'));
 				}
 				out = std::format_to(out, " ");
 			}
@@ -704,3 +736,25 @@ public:
 		return out;
 	}
 };
+
+/** @internal Implementation of non-inline printing functions */
+template <size_t Bits>
+void bga::BigInt<Bits>::print_all()
+{
+	std::println("Dec:\t{}", (*this));
+	std::println("Bin:\t{:b}", (*this));
+	std::println("Hex:\t{:x}", (*this));
+	std::println("MSB:\t{:msb}", (*this));
+	std::println("LSB:\t{:lsb}", (*this));
+}
+
+template <size_t Bits>
+void bga::BigInt<Bits>::print_all(const char *name)
+{
+	std::println("Num {}:", name);
+	std::println("\tDec:\t{}", (*this));
+	std::println("\tBin:\t{:b}", (*this));
+	std::println("\tHex:\t{:x}", (*this));
+	std::println("\tMSB:\t{:msb}", (*this));
+	std::println("\tLSB:\t{:lsb}", (*this));
+}
