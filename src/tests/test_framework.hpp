@@ -136,16 +136,22 @@ struct TestSuite {
 			std::random_device rd;
 			std::mt19937_64 gene(rd());
 
+			auto start_time = std::chrono::high_resolution_clock::now();
+
 			for(size_t i = 0; i < batches; i++) {
 				(logic.template operator()<Ns>(gene), ...);
-				// progress(i, batches);
 
 				if(batches > 100 && i % (batches / 100) == 0) {
 					int percent = (i * 100) / batches;
 					update_line(my_id + 1, make_progress_bar(name, percent, 100));
 				}
 			}
-			std::string msg = std::format("COMPLETED {}.{}", name, std::string(12, ' '));
+			auto end_time = std::chrono::high_resolution_clock::now();
+			auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+			auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(duration);
+
+			std::string msg = std::format("COMPLETED {:<50} [ \033[94m{:.3f}s\033[0m ]",
+						      name, seconds.count());
 			update_line(my_id + 1, msg);
 		};
 		test_suites.push_back(test_wrapper);

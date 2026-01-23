@@ -294,6 +294,33 @@ public:
 		return radix.end();
 	}
 
+	iterator rbegin()
+	{
+		return radix.rbegin();
+	}
+	iterator rend()
+	{
+		return radix.rend();
+	}
+
+	const_iterator begin() const
+	{
+		return radix.begin();
+	}
+	const_iterator end() const
+	{
+		return radix.end();
+	}
+
+	const_iterator rbegin() const
+	{
+		return radix.rbegin();
+	}
+	const_iterator rend() const
+	{
+		return radix.rend();
+	}
+
 	/** @brief Appends a new chunk to the most significant position. */
 	void push_bits(T num)
 	{

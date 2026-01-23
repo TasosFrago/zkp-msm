@@ -6,6 +6,7 @@
 #include "mod_arth.hpp"
 
 #include "tests/tests.hpp"
+#include "tests/utils/helpers.hpp"
 
 int main(int argc, char *argv[])
 {
@@ -23,16 +24,38 @@ int main(int argc, char *argv[])
 	// auto c = bga::AND<4>(a, b);
 	// std::println("c \t{0},\t {0:b}", c);
 
-	// constexpr size_t BITS = 8;
-	// bga::BigInt<BITS> N("1096546981");
-	// bga::BigInt<BITS> a("993037165");
-	// bga::BigInt<BITS> b("666307479");
+	// constexpr size_t BITS = 32;
+	// bga::bgint<BITS> N("1000000007");
+	// bga::bgint<BITS> a("143382731");
 	//
+	// auto a_inv = mda::inverse(a, N);
+	// std::println("a_inv {}", a_inv);
+
+	constexpr size_t BITS = 32;
+	bga::BigInt<BITS> N("1096546981");
+	bga::BigInt<BITS> a("993037165");
+	bga::BigInt<BITS> b("-666307479");
+
+	bga::bgint<BITS> c_sos, c_cios, c_fios;
+
+	auto sos_time = measure_time([&]() {
+		c_sos = mda::mul<BITS, mda::MONT_ALGO::SOS, true>(a, b, N);
+	});
+
+	auto cios_time = measure_time([&]() {
+		c_cios = mda::mul<BITS, mda::MONT_ALGO::CIOS, true>(a, b, N);
+	});
+
+	auto fios_time = measure_time([&]() {
+		c_fios = mda::mul<BITS, mda::MONT_ALGO::FIOS, true>(a, b, N);
+	});
+
 	// auto c_sos = mda::mul<BITS, mda::MONT_ALGO::SOS>(a, b, N);
 	// auto c_cios = mda::mul<BITS, mda::MONT_ALGO::CIOS>(a, b, N);
 	// auto c_fios = mda::mul<BITS, mda::MONT_ALGO::FIOS>(a, b, N);
-	//
-	// std::println("c_sos {} == c_cios {} == c_fios {}", c_sos, c_cios, c_fios);
+
+	std::println("c_sos {} == c_cios {} == c_fios {}", c_sos, c_cios, c_fios);
+	std::println("t: {},\t {}, \t {}", sos_time, cios_time, fios_time);
 
 	// bga::bgint<2> test("0x3");
 	// test.print_all("test");

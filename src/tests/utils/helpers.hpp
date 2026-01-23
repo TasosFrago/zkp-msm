@@ -73,6 +73,16 @@ bga::BigInt<Bits> run_mod_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigI
 
 std::function<std::string()> genRandBgN(size_t digits = 10);
 
+template <typename Func>
+auto measure_time(Func &&func)
+{
+	auto start = std::chrono::high_resolution_clock::now();
+	func();
+	auto end = std::chrono::high_resolution_clock::now();
+
+	return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
 template <typename Func, typename... Args>
 auto time_it(Func &&func, Args &&...args)
 {

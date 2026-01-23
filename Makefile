@@ -1,12 +1,15 @@
 MAKEFLAGS += -j$(shell nproc)
 
-CXX = clang++
+CCACHE := $(shell command -v ccache 2> /dev/null)
+CXX := clang++
+
+CXX := $(CCACHE) $(CXX)
 
 DEBUG ?= 1
 BUILD_DIR = build
 
 # Compilers flags
-FLAGS = -Wall -Werror -Wno-\#warnings -Wno-c++26-extensions
+FLAGS = -fuse-ld=mold -Wall -Werror -Wno-\#warnings -Wno-c++26-extensions
 
 ifneq (,$(findstring clang,$(CXX))) # Using CLANG LLVM
 FLAGS += -Wno-unused-command-line-argument -fcolor-diagnostics -fansi-escape-codes

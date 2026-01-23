@@ -8,7 +8,7 @@ BUILTIN_STL_SUPPORT    = YES
 
 # --- Input Configuration ---
 # This assumes your .hpp files are in the current directory
-INPUT                  = .
+INPUT                  = ./src/
 FILE_PATTERNS          = *.hpp *.cpp *.h
 RECURSIVE              = YES
 EXCLUDE_PATTERNS       = */tests/* */benchmarks/*
