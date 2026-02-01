@@ -28,6 +28,7 @@
 	do {                                                                                          \
 		if(!(expr)) {                                                                         \
 			const auto loc = std::source_location::current();                             \
+			std::println(stderr, "\033[?25h");                                            \
 			std::println(stderr, "Assertion failed: {}:{}", loc.file_name(), loc.line()); \
 			std::println(stderr, msg __VA_OPT__(, ) __VA_ARGS__);                         \
 			std::println("fun: {}", __PRETTY_FUNCTION__);                                 \
@@ -155,10 +156,8 @@ private:
 	using T_double = typename SelectIntType_t<Bits>::uintd_t;
 
 	std::vector<T> radix; ///< Internal storage of integer chunks.
-	size_t bits;	      ///< The bit width of each chunk (constant Bits).
+	size_t bits = Bits;   ///< The bit width of each chunk (constant Bits).
 	bool m_is_negative;   ///< Flag indicating if the number is negative.
-
-	std::string decimal_repr; ///< Internal cache for decimal representation (optional usage).
 
 	/**
 	 * @brief Divides a decimal string by 2 and returns the remainder.
@@ -199,9 +198,8 @@ public:
 	/**
 	 * @brief Default constructor. Initializes the value to 0.
 	 */
-	BigInt() : bits(Bits), m_is_negative(false)
-	{
-	}
+	BigInt()
+	    : bits(Bits), m_is_negative(false) {};
 
 	/**
 	 * @brief Constructs a BigInt from a 128-bit integer.
@@ -235,7 +233,7 @@ public:
 	 * Supports "0x" prefix for hexadecimal values.
 	 * @param a The string representation of the number.
 	 */
-	BigInt(std::string a) : bits(Bits), decimal_repr(a)
+	BigInt(std::string a) : bits(Bits)
 	{
 		std::vector<bool> bitArray;
 
@@ -279,6 +277,48 @@ public:
 			}
 			radix.push_back(chunkValue);
 		}
+	}
+
+	/**
+	 * @brief Move constructor.
+	 */
+	BigInt(BigInt &&other) noexcept
+	    : radix(std::move(other.radix)),
+	      bits(other.bits),
+	      m_is_negative(other.m_is_negative) {};
+
+	/**
+	 * @brief Move assignment.
+	 */
+	BigInt &operator=(BigInt &&other) noexcept
+	{
+		if(this != &other) {
+			this->radix = std::move(other.radix);
+			this->m_is_negative = other.m_is_negative;
+			this->bits = other.bits;
+		}
+		return *this;
+	}
+
+	/**
+	 * @brief Copy constructor.
+	 */
+	BigInt(const BigInt &other) noexcept
+	    : radix(other.radix),
+	      bits(other.bits),
+	      m_is_negative(other.m_is_negative) {};
+
+	/**
+	 * @brief Copy assignment.
+	 */
+	BigInt &operator=(const BigInt &other) noexcept
+	{
+		if(this != &other) {
+			this->radix = other.radix;
+			this->m_is_negative = other.m_is_negative;
+			this->bits = other.bits;
+		}
+		return *this;
 	}
 
 	/** @name Data Access and Iterators */

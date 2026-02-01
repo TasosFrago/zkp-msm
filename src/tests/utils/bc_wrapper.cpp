@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <functional>
 #include <random>
 #include <stdexcept>
@@ -38,7 +39,7 @@ std::function<std::string()> genRandBgN(size_t digits)
 
 BcExec::BcExec()
 {
-	if(pipe(pipe_in_) < 0 || pipe(pipe_out_) < 0) {
+	if(pipe2(pipe_in_, O_CLOEXEC) < 0 || pipe2(pipe_out_, O_CLOEXEC) < 0) {
 		throw std::runtime_error("Failed to create pipes");
 	}
 
@@ -51,17 +52,17 @@ BcExec::BcExec()
 		dup2(pipe_in_[0], STDIN_FILENO);
 		dup2(pipe_out_[1], STDOUT_FILENO);
 
-		close(pipe_in_[1]);
-		close(pipe_out_[0]);
-		close(pipe_in_[0]);
-		close(pipe_out_[1]);
+		// close(pipe_in_[1]);
+		// close(pipe_out_[0]);
+		// close(pipe_in_[0]);
+		// close(pipe_out_[1]);
 
-		setenv("BC_LINE_LENGTH", "0", 1);
+		setenv("BC_LIE_LENGTH", "0", 1);
 
 		execlp("bc", "bc", "-q", nullptr);
 
-		perror("execlp failed");
-		exit(1);
+		// perror("execlp failed");
+		_exit(1);
 	} else {
 		close(pipe_in_[0]);
 		close(pipe_out_[1]);
@@ -71,6 +72,8 @@ BcExec::BcExec()
 BcExec::~BcExec()
 {
 	if(pid_ > 0) {
+		write(pipe_in_[1], "quit\n", 5);
+
 		close(pipe_in_[1]);
 		close(pipe_out_[0]);
 		waitpid(pid_, nullptr, 0);

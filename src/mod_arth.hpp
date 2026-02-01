@@ -4,12 +4,11 @@
  * @file mod_arth.hpp
  * @brief Modular arithmetic and Montgomery multiplication implementations.
  */
+#include <utility>
 
 #include "big_arth.hpp"
 #include "bigint.hpp"
-#include <ostream>
-#include <print>
-#include <utility>
+#include "mda_primetest.hpp"
 
 /**
  * @namespace mda
@@ -33,20 +32,23 @@ BigInt<Bits> mod(BigInt<Bits> a, BigInt<Bits> q)
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	assertm(!q.is_negative(), "q can't be negative");
 
-	if(a.is_negative()) {
-		a.set_sign(false);
+	auto [_, r] = bga::div(a, q);
+	return r;
 
-		BigInt<Bits> rem = mod(a, q);
-
-		if(rem == 0) return rem;
-
-		return bga::sub(q, rem);
-	}
-
-	while(a >= q) {
-		a = bga::sub(a, q);
-	}
-	return a;
+	// if(a.is_negative()) {
+	// 	a.set_sign(false);
+	//
+	// 	BigInt<Bits> rem = mod(a, q);
+	//
+	// 	if(rem == 0) return rem;
+	//
+	// 	return bga::sub(q, rem);
+	// }
+	//
+	// while(a >= q) {
+	// 	a = bga::sub(a, q);
+	// }
+	// return a;
 }
 
 /**
@@ -58,15 +60,15 @@ BigInt<Bits> mod(BigInt<Bits> a, BigInt<Bits> q)
  * @return BigInt<Bits> representing (a + b mod q).
  */
 template <size_t Bits>
-BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
+BigInt<Bits> add(const BigInt<Bits> &a, const BigInt<Bits> &b, const BigInt<Bits> &q)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	assert(a < q && b < q && "a and b need to be smaller than q");
 
-	BigInt<Bits> W = bga::add(a, b);
+	BigInt<Bits> W = bga::add_mag(a, b);
 
 	if(W >= q) {
-		W = bga::sub(W, q);
+		W = bga::sub_mag(W, q);
 	}
 
 	assert(W < q && "Result should be smaller than q");
@@ -82,17 +84,17 @@ BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
  * @return BigInt<Bits> representing (a - b mod q).
  */
 template <size_t Bits>
-BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
+BigInt<Bits> sub(const BigInt<Bits> &a, const BigInt<Bits> &b, const BigInt<Bits> &q)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	assert(a < q && b < q && "a and b need to be smaller than q");
-	using bga::add;
-	using bga::sub;
+	using bga::add_mag;
+	using bga::sub_mag;
 
 	if(a >= b) {
-		return sub(a, b);
-	} else if(a < b) {
-		return sub(add(a, q), b);
+		return sub_mag(a, b);
+	} else {
+		return sub_mag(add_mag(a, q), b);
 	}
 	std::unreachable();
 }
@@ -127,11 +129,24 @@ struct Montgomery {
 	size_t n_chunks;   ///< Number of chunks in the modulus.
 	size_t total_bits; ///< Total bit width (n_chunks * Bits).
 
+	// NOTE: Maybe revisit this idea later.
+	struct bgint_m {
+		bga::bgint<Bits> value;
+
+		explicit bgint_m(bga::bgint<Bits> v) : value(std::move(v)) {};
+
+		operator const bga::bgint<Bits> &() const
+		{
+			return value;
+		}
+	};
+
 private:
 	/**
 	 * @brief Calculates the Montgomery constant n' using Newton's method.
 	 */
-	static uint calc_n_p(uint n0)
+	static constexpr uint
+	calc_n_p(uint n0)
 	{
 		// n0 &= mask;
 		uint x = 1;
@@ -143,7 +158,7 @@ private:
 			x *= ((uint)2 - n0 * x);
 		}
 
-		uint mask = (Bits >= sizeof(uint) * 8) ? (uint)-1 : ((uint)1 << Bits) - 1;
+		uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
 		return (uint)((-x) & mask);
 	}
@@ -159,7 +174,7 @@ private:
 		for(size_t i = 0; i < double_total_bits; i++) {
 			x = bga::lshift(x, 1);
 			if(x >= n) {
-				x = bga::sub(x, n);
+				x = bga::sub_mag(x, n);
 			}
 		}
 		return x;
@@ -183,13 +198,21 @@ public:
 	}
 
 	/** @brief Transforms a standard integer into the Montgomery domain (xR mod n). */
-	bgint init(bgint x)
+	bgint init(bgint x, bool normalize = false) const
 	{
+		if(normalize) {
+			if(x.is_negative() || x >= n) {
+				x = mda::mod(x, n);
+				if(x.is_negative()) {
+					x = bga::add(x, n);
+				}
+			}
+		}
 		return mul(x, r2);
 	}
 
 	/** @brief Performs Montgomery Multiplication (abR^-1 mod n). */
-	bgint mul(bgint a, bgint b)
+	bgint mul(const bgint &a, const bgint &b) const
 	{
 		if constexpr(algo == MONT_ALGO::SOS) {
 			return mul_sos(a, b);
@@ -201,17 +224,16 @@ public:
 	}
 
 	/** @brief Transforms a Montgomery domain integer back to the standard domain. */
-	bgint trans_back(bgint x)
+	bgint trans_back(const bgint &x) const
 	{
-		bgint one(1);
+		static const bgint one(1);
 		return mul(x, one);
 	}
 
-	/**
-	 * @brief Separated Operand Scanning (SOS) Reduction.
-	 */
-	bgint reduce_sos(bgint t)
+	/** @brief SOS Multiplication implementation. */
+	bgint mul_sos(const bgint &a, const bgint &b) const
 	{
+		auto t = bga::mul(a, b);
 		/*
 		 * for i = 0 to s - 1
 		 * 	C = 0
@@ -224,7 +246,7 @@ public:
 		 * 	for j = 0 to s
 		 * 		u[j] = t[j + s]
 		 */
-		uint mask = (Bits >= sizeof(uint) * 8) ? (uint)-1 : ((uint)1 << Bits) - 1;
+		uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
 		for(size_t i = 0; i < n_chunks; i++) {
 			uint m = (uint)(((uintDouble)t.get_safe(i) * (uintDouble)n_p) & mask);
@@ -233,24 +255,18 @@ public:
 			prod = bga::mul(prod, n);
 			prod = bga::lshift(prod, i * Bits);
 
-			t = bga::add(t, prod);
+			t = bga::add_mag(t, prod);
 		}
 
 		t = bga::rshift(t, total_bits);
 
-		return (t >= n) ? bga::sub(t, n) : t;
-	}
-
-	/** @brief SOS Multiplication implementation. */
-	bgint mul_sos(bgint a, bgint b)
-	{
-		return reduce_sos(bga::mul(a, b));
+		return (t >= n) ? bga::sub_mag(t, n) : t;
 	}
 
 	/**
 	 * @brief Coarsely Integrated Operand Scanning (CIOS) Multiplication.
 	 */
-	bgint mul_cios(bgint a, bgint b)
+	bgint mul_cios(const bgint &a, const bgint &b) const
 	{
 		/*
 		 * for i = 0 to s - 1
@@ -313,13 +329,13 @@ public:
 			t.push_bits(0, n_chunks + 1);
 		}
 
-		return (t >= n) ? bga::sub(t, n) : t;
+		return (t >= n) ? bga::sub_mag(t, n) : t;
 	}
 
 	/**
 	 * @brief Finely Integrated Operand Scanning (FIOS) Multiplication.
 	 */
-	bgint mul_fios(bgint a, bgint b)
+	bgint mul_fios(const bgint &a, const bgint &b) const
 	{
 		/*
 		 * for i to s - 1
@@ -417,7 +433,43 @@ public:
 			t.push_bits(0, n_chunks + 1);
 		}
 
-		return (t >= n) ? bga::sub(t, n) : t;
+		return (t >= n) ? bga::sub_mag(t, n) : t;
+	}
+
+	/**
+	 * @brief Performs modular exponentiation in Montgomery domain using binary exponentiation.
+	 * @param base_m Base in montgomery domain
+	 * @param exp Exponent
+	 * @return BigInt<Bits> (base_m^exp_m)
+	 */
+	bgint pow(bgint base_m, const bgint &exp) const
+	{
+		bgint res_m = init(bgint(1));
+
+		for(const auto &chunk : exp) {
+			for(size_t j = 0; j < Bits; j++) {
+				if((chunk >> j) & 1) {
+					res_m = mul(res_m, base_m);
+				}
+				base_m = mul(base_m, base_m);
+			}
+		}
+		return res_m;
+	}
+
+	/**
+	 * @brief Performs modular inverse in Montgomery domain using Fermat's little theorem
+	 * @param a_m First operand
+	 * @return BigInt<Bits> (a_m^-1 mod N)
+	 */
+	bgint inv(bgint a_m) const
+	{
+		// assertm((mda::get_primalityTester<Bits, MONT_ALGO::FIOS>().is_prime(this->n)),
+		// 	"Inversion does not work on non prime moduly. Num tested {}", this->n);
+		const bgint two(2);
+		bgint exp = bga::sub_mag(n, two); // a_m^(n - 2)
+
+		return pow(a_m, exp);
 	}
 };
 
@@ -430,16 +482,55 @@ public:
  * @param q The modulus.
  * @return BigInt<Bits> representing (ab mod q).
  */
-template <size_t Bits, MONT_ALGO algo>
+template <size_t Bits, MONT_ALGO algo, bool Normalize = false>
 BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 {
 	Montgomery<Bits, algo> mont(q);
 
-	auto a_m = mont.init(a);
-	auto b_m = mont.init(b);
+	auto a_m = mont.init(a, Normalize);
+	auto b_m = mont.init(b, Normalize);
 	auto c_m = mont.mul(a_m, b_m);
 
 	return mont.trans_back(c_m);
+}
+
+/**
+ * @brief Performs modular exponentiation using binary exponentiation.
+ * @param base Base
+ * @param exp  Exponent
+ * @param N    Modulus
+ * @return BigInt<Bits> (base_m^exp_m mod N)
+ */
+template <size_t Bits, MONT_ALGO algo = MONT_ALGO::FIOS>
+BigInt<Bits> pow(BigInt<Bits> base, BigInt<Bits> exp, BigInt<Bits> N)
+{
+	Montgomery<Bits, algo> mont(N);
+
+	auto base_m = mont.init(base);
+	auto res_m = mont.pow(base_m, exp);
+
+	return mont.trans_back(res_m);
+}
+
+/**
+ * @brief Performs modular inverse using Fermat's little theorem
+ * @param a First operand
+ * @param N Modulus (must be prime)
+ * @return BigInt<Bits> (a_m^-1 mod N)
+ */
+template <size_t Bits, MONT_ALGO algo = MONT_ALGO::FIOS>
+BigInt<Bits> inverse(BigInt<Bits> a, BigInt<Bits> N)
+{
+	if(a >= N) {
+		a = mda::mod(a, N);
+	}
+	Montgomery<Bits, algo> mont(N);
+
+	auto a_m = mont.init(a);
+
+	auto res_m = mont.inv(a_m);
+
+	return mont.trans_back(res_m);
 }
 
 } // namespace mda

@@ -14,28 +14,43 @@
 namespace bga
 {
 
-/**
- * @brief Performs addition of two non-negative BigInts.
- * @tparam Bits Number of bits per chunk.
- * @param a The first operand.
- * @param b The second operand.
- * @return A new BigInt representing the sum of a and b.
- * @note This function asserts that both inputs are non-negative.
- */
 template <size_t Bits>
-BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b)
+int cmp_mag(const BigInt<Bits> &a, const BigInt<Bits> &b)
+{
+	// -1: |a| <  |b|
+	// 0:  |a| == |b|
+	// 1:  |a| >  |b|
+	size_t a_chunks = a.effective_size();
+	size_t b_chunks = b.effective_size();
+
+	if(a_chunks > b_chunks) return 1;
+	if(a_chunks < b_chunks) return -1;
+
+	assertm(a_chunks == b_chunks, "Chunk sizes are not the same");
+
+	for(int64_t i = a_chunks - 1; i >= 0; i--) {
+		auto a_val = a.get(i);
+		auto b_val = b.get(i);
+		if(a_val > b_val) return 1;
+		if(a_val < b_val) return -1;
+	}
+	return 0;
+}
+
+template <size_t Bits>
+BigInt<Bits> add_mag(const BigInt<Bits> &a, const BigInt<Bits> &b)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
-	assert(!a.is_negative() && !b.is_negative() && "Can't do addition with negative numbers");
+	// assert(!a.is_negative() && !b.is_negative() && "Can't do addition with negative numbers");
 	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
 
+	size_t size = (a.get_chunks() > b.get_chunks()) ? a.get_chunks() : b.get_chunks();
+
 	BigInt<Bits> W;
-	W.reserve(a.get_chunks());
+	W.reserve(size + 1);
 
 	uintDouble carry = 0;
-	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
-
-	size_t size = (a.get_chunks() > b.get_chunks()) ? a.get_chunks() : b.get_chunks();
+	constexpr uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
 	for(size_t i = 0; i < size; i++) {
 		uintDouble tmp = (uintDouble)a.get_safe(i) + (uintDouble)b.get_safe(i) + carry;
@@ -47,6 +62,94 @@ BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b)
 	return W;
 }
 
+template <size_t Bits>
+BigInt<Bits> sub_mag(const BigInt<Bits> &a, const BigInt<Bits> &b)
+{
+	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
+	using intDouble = typename SelectIntType_t<Bits>::intd_t;
+
+	constexpr uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
+
+	BigInt<Bits> W;
+	W.reserve(a.get_chunks());
+
+	intDouble carry = 0;
+	size_t size = a.get_chunks();
+
+	for(size_t i = 0; i < size; i++) {
+		intDouble diff = (intDouble)a.get_safe(i) - (intDouble)b.get_safe(i) + carry;
+		W.push_bits(diff & mask);
+
+		carry = (diff < 0) ? -1 : 0;
+	}
+
+	W.trim();
+	return W;
+}
+
+template <size_t Bits>
+BigInt<Bits> add(const BigInt<Bits> &a, const BigInt<Bits> &b)
+{
+	static_assert(Bits <= 64 && "Can't support larger bits sizes");
+
+	auto a_sign = a.is_negative();
+	auto b_sign = b.is_negative();
+
+	if(a_sign == b_sign) [[likely]] {
+		BigInt<Bits> res = add_mag(a, b);
+		res.set_sign(a_sign);
+		return res;
+	}
+
+	int comparison = cmp_mag(a, b);
+
+	if(comparison == 0) {
+		return BigInt<Bits>(0);
+	}
+
+	BigInt<Bits> res;
+	if(comparison > 0) {
+		res = sub_mag(a, b);
+		res.set_sign(a_sign);
+	} else {
+		res = sub_mag(b, a);
+		res.set_sign(b_sign);
+	}
+	return res;
+}
+
+template <size_t Bits>
+BigInt<Bits> sub(const BigInt<Bits> &a, const BigInt<Bits> &b)
+{
+	static_assert(Bits <= 64 && "Can't support larger bits sizes");
+
+	auto a_sign = a.is_negative();
+	auto b_sign = b.is_negative();
+
+	if(a_sign != b_sign) [[unlikely]] {
+		BigInt<Bits> res = add_mag(a, b);
+		res.set_sign(a_sign);
+		return res;
+	}
+
+	int comparison = cmp_mag(a, b);
+
+	if(comparison == 0) {
+		return BigInt<Bits>(0);
+	}
+
+	BigInt<Bits> res;
+	if(comparison > 0) {
+		res = sub_mag(a, b);
+		res.set_sign(a_sign);
+	} else {
+		res = sub_mag(b, a);
+		res.set_sign(!b_sign);
+	}
+
+	return res;
+}
+
 /**
  * @brief Performs subtraction of two BigInts.
  * @tparam Bits Number of bits per chunk.
@@ -55,44 +158,77 @@ BigInt<Bits> add(BigInt<Bits> a, BigInt<Bits> b)
  * @return A new BigInt representing (a - b).
  * @note Correctly handles signs and negative results using borrow logic.
  */
-template <size_t Bits>
-BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b)
-{
-	static_assert(Bits <= 64 && "Can't support larger bits sizes");
-	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
-	using intDouble = typename SelectIntType_t<Bits>::intd_t;
+// template <size_t Bits>
+// BigInt<Bits> sub(BigInt<Bits> a, BigInt<Bits> b)
+// {
+// 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
+// 	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
+// 	using intDouble = typename SelectIntType_t<Bits>::intd_t;
+//
+// 	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
+//
+// 	auto subtract = [mask](BigInt<Bits> &x, BigInt<Bits> &y) -> std::pair<BigInt<Bits>, intDouble> {
+// 		intDouble carry = 0;
+// 		BigInt<Bits> W;
+// 		W.reserve(x.get_chunks());
+//
+// 		size_t size = (x.get_chunks() > y.get_chunks()) ? x.get_chunks() : y.get_chunks();
+//
+// 		for(size_t i = 0; i < size; i++) {
+// 			intDouble diff = (intDouble)x.get_safe(i) - (intDouble)y.get_safe(i) + carry;
+// 			W.push_bits(diff & mask);
+//
+// 			carry = ((intDouble)diff < 0) ? -1 : 0;
+// 		}
+// 		return { W, carry };
+// 	};
+//
+// 	auto [W, carry] = subtract(a, b);
+//
+// 	if(carry == -1) {
+// 		BigInt<Bits> zero;
+// 		auto [result, final_c] = subtract(zero, W);
+// 		result.set_sign(true);
+//
+// 		return result;
+// 	}
+// 	W.trim();
+//
+// 	return W;
+// }
 
-	uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
-
-	auto subtract = [mask](BigInt<Bits> &x, BigInt<Bits> &y) -> std::pair<BigInt<Bits>, intDouble> {
-		intDouble carry = 0;
-		BigInt<Bits> W;
-		W.reserve(x.get_chunks());
-
-		size_t size = (x.get_chunks() > y.get_chunks()) ? x.get_chunks() : y.get_chunks();
-
-		for(size_t i = 0; i < size; i++) {
-			intDouble diff = (intDouble)x.get_safe(i) - (intDouble)y.get_safe(i) + carry;
-			W.push_bits(diff & mask);
-
-			carry = ((intDouble)diff < 0) ? -1 : 0;
-		}
-		return { W, carry };
-	};
-
-	auto [W, carry] = subtract(a, b);
-
-	if(carry == -1) {
-		BigInt<Bits> zero;
-		auto [result, final_c] = subtract(zero, W);
-		result.set_sign(true);
-
-		return result;
-	}
-	W.trim();
-
-	return W;
-}
+/**
+ * @brief Performs addition of two non-negative BigInts.
+ * @tparam Bits Number of bits per chunk.
+ * @param a The first operand.
+ * @param b The second operand.
+ * @return A new BigInt representing the sum of a and b.
+ * @note This function asserts that both inputs are non-negative.
+ */
+// template <size_t Bits>
+// BigInt<Bits> add(const BigInt<Bits> &a, const BigInt<Bits> &b)
+// {
+// 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
+// 	assert(!a.is_negative() && !b.is_negative() && "Can't do addition with negative numbers");
+// 	using uintDouble = typename SelectIntType_t<Bits>::uintd_t;
+//
+// 	size_t size = (a.get_chunks() > b.get_chunks()) ? a.get_chunks() : b.get_chunks();
+//
+// 	BigInt<Bits> W;
+// 	W.reserve(size + 1);
+//
+// 	uintDouble carry = 0;
+// 	constexpr uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
+//
+// 	for(size_t i = 0; i < size; i++) {
+// 		uintDouble tmp = (uintDouble)a.get_safe(i) + (uintDouble)b.get_safe(i) + carry;
+// 		W.push_bits(tmp & mask);
+// 		carry = (tmp >> Bits);
+// 	}
+//
+// 	if(carry != 0) W.push_bits(carry);
+// 	return W;
+// }
 
 /**
  * @brief Performs multiplication of two BigInts.
@@ -168,11 +304,11 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 	if(a == b) {
 		BigInt<Bits> q(1);
 		q.set_sign(a_sign != b_sign);
-		return { q, BigInt<Bits>(0) };
+		return { std::move(q), std::move(BigInt<Bits>(0)) };
 	}
 	if(a < b) {
 		a.set_sign(a_sign);
-		return { BigInt<Bits>(0), a };
+		return { std::move(BigInt<Bits>(0)), std::move(a) };
 	}
 
 	using uint = typename SelectIntType_t<Bits>::uint_t;
@@ -246,7 +382,7 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 
 		if(a.is_negative()) {
 			a.set_sign(false);
-			a = sub(term, a);
+			a = sub_mag(term, a);
 
 			q_tmp--;
 		}
@@ -261,7 +397,7 @@ std::pair<BigInt<Bits>, BigInt<Bits>> div(BigInt<Bits> a, BigInt<Bits> b)
 	q.set_sign(a_sign != b_sign);
 	a.set_sign(a_sign);
 
-	return { q, a /* remainder */ };
+	return { std::move(q), std::move(a) /* remainder */ };
 }
 
 /**
@@ -373,7 +509,7 @@ enum class BitW_2op {
  * @tparam op The operation to perform.
  */
 template <size_t Bits, BitW_2op op>
-BigInt<Bits> bitwise_2op(BigInt<Bits> a, BigInt<Bits> b)
+BigInt<Bits> bitwise_2op(const BigInt<Bits> &a, const BigInt<Bits> &b)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	assertm(!a.is_negative() && !b.is_negative(), "Bitwise operations don't work for negative numbers. a: {}, b: {}", a, b);
@@ -402,21 +538,21 @@ BigInt<Bits> bitwise_2op(BigInt<Bits> a, BigInt<Bits> b)
 
 /** @brief Performs bitwise AND. */
 template <size_t Bits>
-BigInt<Bits> AND(BigInt<Bits> a, BigInt<Bits> b)
+BigInt<Bits> AND(const BigInt<Bits> &a, const BigInt<Bits> &b)
 {
 	return bitwise_2op<Bits, BitW_2op::AND>(a, b);
 }
 
 /** @brief Performs bitwise OR. */
 template <size_t Bits>
-BigInt<Bits> OR(BigInt<Bits> a, BigInt<Bits> b)
+BigInt<Bits> OR(const BigInt<Bits> &a, const BigInt<Bits> &b)
 {
 	return bitwise_2op<Bits, BitW_2op::OR>(a, b);
 }
 
 /** @brief Performs bitwise XOR. */
 template <size_t Bits>
-BigInt<Bits> XOR(BigInt<Bits> a, BigInt<Bits> b)
+BigInt<Bits> XOR(const BigInt<Bits> &a, const BigInt<Bits> &b)
 {
 	return bitwise_2op<Bits, BitW_2op::XOR>(a, b);
 }
@@ -425,7 +561,7 @@ BigInt<Bits> XOR(BigInt<Bits> a, BigInt<Bits> b)
  * @brief Performs bitwise NOT on a non-negative BigInt.
  */
 template <size_t Bits>
-BigInt<Bits> NOT(BigInt<Bits> a)
+BigInt<Bits> NOT(const BigInt<Bits> &a)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	assertm(!a.is_negative(), "NOT operation don't work for negative numbers. a: {}", a);
@@ -448,7 +584,7 @@ BigInt<Bits> NOT(BigInt<Bits> a)
  * @brief Performs two's complement-style negation on a BigInt.
  */
 template <size_t Bits>
-BigInt<Bits> NOT_signed(BigInt<Bits> a)
+BigInt<Bits> NOT_signed(const BigInt<Bits> &a)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
 	using uint = typename SelectIntType_t<Bits>::uint_t;

@@ -26,14 +26,21 @@
 #define _STR_H(...) __STR_H(__VA_ARGS__)
 #define STR(X) _STR_H(X)
 
+// inline thread_local std::map<std::string, int> tls_success_buffer;
 struct TestSuite {
 	bool parallel_exec = true;
 	using test_fn = std::function<void(void)>;
 	std::vector<test_fn> test_suites;
 
+	double total_time_taken_s = 0;
+	std::mutex time_mtx;
+
 	std::mutex mtx;
+	std::map<std::string, std::mutex> mtx_map;
 	std::mutex console_mtx;
 	int total_suites = 0;
+
+	std::string error_log_file = "";
 
 	std::string make_progress_bar(std::string_view name, int p, int width = 50)
 	{
@@ -75,6 +82,7 @@ struct TestSuite {
 	{
 		std::lock_guard<std::mutex> lock(mtx);
 		error_table[key].passed++;
+		// tls_success_buffer[key]++;
 	}
 
 	std::string &fail(const std::string &key)
@@ -84,12 +92,18 @@ struct TestSuite {
 		return error_table[key].msg;
 	}
 
+	void add_time(double time)
+	{
+		std::lock_guard<std::mutex> lock(time_mtx);
+		total_time_taken_s += time;
+	}
+
 	void print_results()
 	{
 		int total_passed = 0;
 		int total_failed = 0;
 
-		std::string buf;
+		std::string buf, error_buf;
 
 		std::println("\n==== RESULTS =====");
 		for(const auto &[key, value] : error_table) {
@@ -102,11 +116,28 @@ struct TestSuite {
 				       key, value.passed, value.failed);
 
 			if(value.failed > 0) {
-				std::println("{:-^7} Errors: {} {:-^7}", "", key, "");
-				std::println("{}", value.msg);
-				std::println("{:-^50}", "");
+				std::format_to(std::back_inserter(error_buf), "{{{{{:-^7} Errors: {} {:-^7}\n", "", key, "");
+				std::format_to(std::back_inserter(error_buf), "{}\n", value.msg);
+				std::format_to(std::back_inserter(error_buf), "}}}}{:-^50}\n", "");
 			}
 		}
+
+		if(total_failed > 0) {
+			std::unique_ptr<FILE, decltype(&std::fclose)> file_guard(nullptr, &std::fclose);
+			FILE *output_target = stderr;
+
+			if(!error_log_file.empty()) {
+				FILE *f = std::fopen(error_log_file.c_str(), "w");
+				if(f) {
+					file_guard.reset(f);
+					output_target = f;
+				} else {
+					std::println(stderr, "Failed to open log file {}, defaulting to stderr", error_log_file);
+				}
+			}
+			std::println(output_target, "{}", error_buf);
+		}
+
 		std::print("{}", buf);
 		std::println("");
 		std::println("{:=^10} TOTAL SUMMARY {:=^10}", "", "");
@@ -118,6 +149,8 @@ struct TestSuite {
 		} else {
 			std::println("RESULT: FAILED");
 		}
+		std::println("Total time: {:.3f}s", total_time_taken_s);
+
 		std::println("{:=^35}\n", "");
 	}
 
@@ -153,13 +186,19 @@ struct TestSuite {
 			std::string msg = std::format("COMPLETED {:<50} [ \033[94m{:.3f}s\033[0m ]",
 						      name, seconds.count());
 			update_line(my_id + 1, msg);
+
+			add_time(seconds.count());
 		};
 		test_suites.push_back(test_wrapper);
 	}
 
 	void run_all()
 	{
-		std::println("Starting execution across {} threads...", std::thread::hardware_concurrency());
+		if(parallel_exec) {
+			std::println("Starting execution across {} threads...", std::thread::hardware_concurrency());
+		} else {
+			std::println("Starting execution serially...");
+		}
 		total_suites++;
 
 		for(int i = 0; i < total_suites; i++) {
@@ -203,18 +242,18 @@ constexpr std::string_view extract_Bits(std::string_view sig)
 	return "";
 }
 
-#define test_assert(key, expr1, expr2, msg, ...)                                                                  \
-	do {                                                                                                      \
-		if((expr1) != (expr2)) {                                                                          \
-			auto &buff = (TESTS).fail(key);                                                           \
-			std::format_to(std::back_inserter(buff),                                                  \
-				       "\t[\033[31mFAILED\033[0m]:[{}] ({}): {} == ({}): {},\n\t\t\t" msg "\n\n", \
-				       extract_Bits(__PRETTY_FUNCTION__),                                         \
-				       #expr1, (expr1), #expr2, (expr2)__VA_OPT__(, ) __VA_ARGS__);               \
-                                                                                                                  \
-		} else {                                                                                          \
-			(TESTS).success(key);                                                                     \
-		}                                                                                                 \
+#define test_assert(key, N, expr1, expr2, msg, ...)                                                                   \
+	do {                                                                                                          \
+		if((expr1) != (expr2)) {                                                                              \
+			auto &buff = (TESTS).fail(key);                                                               \
+			std::format_to(std::back_inserter(buff),                                                      \
+				       "{: ^4}[\033[31mFAILED\033[0m]:[{}] ({}): {} == ({}): {},\n{: ^8}" msg "\n\n", \
+				       "", (N),                                                                       \
+				       #expr1, (expr1), #expr2, (expr2), "" __VA_OPT__(, ) __VA_ARGS__);              \
+                                                                                                                      \
+		} else {                                                                                              \
+			(TESTS).success(key);                                                                         \
+		}                                                                                                     \
 	} while(0)
 
 // FIX: Deprecated

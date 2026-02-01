@@ -22,3 +22,5 @@
 void register_math_tests();
 void register_cmp_tests();
 void register_mod_tests();
+void register_ecc_tests();
+void register_primality_tests();
