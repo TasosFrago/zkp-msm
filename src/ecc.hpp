@@ -291,4 +291,27 @@ static_assert(EllipticCurveConcept<ShortWeierstrassCurve<32>, AffinePoint<32>>,
 static_assert(EllipticCurveConcept<ShortWeierstrassCurve<32>, JacobianPoint<32>>,
 	      "Concept Error: ShortWeierstrassCurve and JacobianPoint does not meet requirements");
 
+template <typename CurveT, typename PointT>
+	requires EllipticCurveConcept<CurveT, PointT>
+auto scalarMul(
+    const CurveT &curve,
+    const PointT &point,
+    const bga::BigInt<CurveT::bits> &scalar) -> PointT
+{
+	PointT res_P;
+
+	for(auto it = scalar.rbegin(); it != scalar.rend(); it++) {
+		const auto chunk = *it;
+
+		for(int j = CurveT::bits - 1; j >= 0; j--) {
+			res_P = curve.dbl(res_P);
+
+			if((chunk >> j) & 1) {
+				res_P = curve.add(res_P, point);
+			}
+		}
+	}
+	return res_P;
+}
+
 } // namespace ecc

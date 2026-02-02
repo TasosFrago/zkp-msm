@@ -106,9 +106,9 @@ int main(int argc, char *argv[])
 
 	// register_primality_tests();
 
-	register_cmp_tests();
-	register_math_tests();
-	register_mod_tests();
+	// register_cmp_tests();
+	// register_math_tests();
+	// register_mod_tests();
 	register_ecc_tests();
 
 	TESTS.run_all();

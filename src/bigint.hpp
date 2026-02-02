@@ -333,6 +333,9 @@ public:
 	///@{
 	using iterator = std::vector<T>::iterator;
 	using const_iterator = std::vector<T>::const_iterator;
+	using reverse_iterator = std::vector<T>::reverse_iterator;
+	using const_reverse_iterator = std::vector<T>::const_reverse_iterator;
+
 	iterator begin()
 	{
 		return radix.begin();
@@ -342,11 +345,11 @@ public:
 		return radix.end();
 	}
 
-	iterator rbegin()
+	reverse_iterator rbegin()
 	{
 		return radix.rbegin();
 	}
-	iterator rend()
+	reverse_iterator rend()
 	{
 		return radix.rend();
 	}
@@ -360,11 +363,11 @@ public:
 		return radix.end();
 	}
 
-	const_iterator rbegin() const
+	const_reverse_iterator rbegin() const
 	{
 		return radix.rbegin();
 	}
-	const_iterator rend() const
+	const_reverse_iterator rend() const
 	{
 		return radix.rend();
 	}

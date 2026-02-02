@@ -161,6 +161,44 @@ struct TestECCArithmetic<ecc::ShortWeierstrassCurve, PointT> {
 	}
 };
 
+template <
+    template <size_t> typename CurveT,
+    template <size_t> typename PointT>
+struct TestECCscalarMul {
+	template <size_t N>
+	void operator()(std::mt19937_64 &) const
+	{
+		assertm(false, "You shouldn't run this");
+	}
+};
+
+template <template <size_t> typename PointT>
+struct TestECCscalarMul<ecc::ShortWeierstrassCurve, PointT> {
+	static constexpr std::string_view point_name = type_name<PointT<0>>();
+
+	template <size_t N>
+	void operator()(std::mt19937_64 &gen) const noexcept
+	{
+		using namespace ecc;
+		using FieldT = bga::BigInt<N>;
+
+		const FieldT prime("2824971001");
+		FieldT a("22457757"), b("92700867");
+
+		ShortWeierstrassCurve curve(a, b, prime);
+
+		auto G_test = make_point<PointT, N>(FieldT("1596109"), FieldT("4098011"));
+
+		auto result = scalarMul(curve, G_test, FieldT("594"));
+
+		auto res_norm = normalize(curve, result);
+
+		test_assert(std::format("ECC scalarMul {}", point_name), N,
+			    (res_norm.x == FieldT("1934875196")) && (res_norm.y == FieldT("1139617403")), true,
+			    "Should have been equal. Got ({}, {})", res_norm.x, res_norm.y);
+	}
+};
+
 void register_ecc_tests()
 {
 	TESTS.register_test<BITS_TEST_MOD___N>(
@@ -177,4 +215,14 @@ void register_ecc_tests()
 	    "ECC ShortWeierstrass Jacobian arth",
 	    400,
 	    TestECCArithmetic<ecc::ShortWeierstrassCurve, ecc::JacobianPoint>{});
+
+	TESTS.register_test<BITS_TEST_MOD___N>(
+	    "ECC SWC Affine scalarMull",
+	    1,
+	    TestECCscalarMul<ecc::ShortWeierstrassCurve, ecc::AffinePoint>{});
+
+	TESTS.register_test<BITS_TEST_MOD___N>(
+	    "ECC SWC Jacobian scalarMull",
+	    1,
+	    TestECCscalarMul<ecc::ShortWeierstrassCurve, ecc::JacobianPoint>{});
 }
