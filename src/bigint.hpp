@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <compare>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -227,6 +228,13 @@ public:
 			}
 		} while(value != 0);
 	}
+
+	BigInt(const char *s) : BigInt(std::string(s)) {};
+
+	template <std::integral T>
+	BigInt(T n) : BigInt(static_cast<__int128_t>(n)){};
+
+	BigInt(std::nullptr_t) = delete;
 
 	/**
 	 * @brief Constructs a BigInt from a string (Decimal or Hex).

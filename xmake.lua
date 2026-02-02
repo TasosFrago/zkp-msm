@@ -1,4 +1,6 @@
 add_rules("mode.debug", "mode.release")
+
+set_allowedmodes("debug", "release", "profile")
 set_defaultmode("debug")
 
 set_project("mp_arth")
@@ -28,12 +30,21 @@ elseif cxx:find("gcc") or cxx:find("g++") or toolchain:find("gcc") then
 end
 
 if is_mode("debug") then
-    set_optimize("none")
-    add_cxflags("-ggdb", "-fsanitize=address", "-fno-omit-frame-pointer")
-    add_ldflags("-fsanitize=address")
-else
-    set_optimize("fastest")
-    add_defines("NDEBUG")
+	set_optimize("none")
+	add_cxflags("-ggdb", "-fsanitize=address", "-fno-omit-frame-pointer")
+	add_ldflags("-fsanitize=address")
+
+elseif is_mode("release") then
+	set_optimize("fastest")
+	set_strip("all")
+	add_defines("NDEBUG")
+
+elseif is_mode("profile") then
+	set_optimize("fastest")
+	set_symbols("debug")
+	set_strip("none")
+	add_cxflags("-gdwarf-4", "-fno-omit-frame-pointer")
+	add_defines("NDEBUG")
 end
 
 target("primesGen")
@@ -41,6 +52,7 @@ target("primesGen")
 	set_default(false)
 	add_files("cmd/primesGen.cpp")
 	add_files("src/tests/utils/bc_wrapper.cpp")
+	set_policy('build.fence', true)
 
 
 target("gen_primes_header")
@@ -76,6 +88,7 @@ target("gen_primes_header")
 			os.rm(gen_dir)
 		end)
 
+
 for _, filepath in ipairs(os.files("cmd/*.cpp")) do
 	local name = path.basename(filepath)
 	if name ~= "primesGen" then
@@ -83,9 +96,42 @@ for _, filepath in ipairs(os.files("cmd/*.cpp")) do
 			set_kind("binary")
 			set_default(true)
 
+			if not is_mode("release") then
+				set_symbols("debug")
+			end
+
+			set_policy("build.sanitizer.address", true)
+
 			add_files(filepath)
 			add_files("src/**.cpp")
+			add_deps("gen_primes_header")
 
-			add_deps("primesGen")
+			if not is_mode("release") then
+				on_run(function(target)
+					import("lib.detect.find_tool")
+					import("core.base.option")
+
+					local args = option.get("arguments") or {}
+
+					local tool = find_tool("llvm-symbolizer")
+					local sym_path = tool and tool.program or ""
+
+					local custom_envs = {
+						ASAN_OPTIONS = "color=always:symbolize=1",
+						ASAN_SYMBOLIZER_PATH = sym_path,
+						TERM = os.getenv("TERM")
+					}
+
+				        print("========== XMAKE RUN DEBUG ==========")
+					print("Target Binary: " .. target:targetfile())
+        				print("Args: " .. table.concat(args, " "))
+        				print("Symbolizer Path: " .. (sym_path ~= "" and sym_path or "NOT FOUND!"))
+        				print("ASAN_OPTIONS: " .. custom_envs.ASAN_OPTIONS)
+        				print("TERM: " .. (custom_envs.TERM or "nil"))
+        				print("=====================================")
+
+					os.execv(target:targetfile(), args, {envs = custom_envs})
+				end)
+			end
 	end
 end

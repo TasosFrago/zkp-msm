@@ -72,7 +72,7 @@ private:
 				// a = bga::add(a, bga::lshift(bga::BigInt<Bits>(r_val), i * Bits));
 			}
 			a.trim();
-			if(a > 0 && a <= n_minus_4) return bga::add(a, bga::BigInt<Bits>(2));
+			if(a > bga::BigInt<Bits>(0) && a <= n_minus_4) return bga::add(a, bga::BigInt<Bits>(2));
 		}
 		std::unreachable();
 	}

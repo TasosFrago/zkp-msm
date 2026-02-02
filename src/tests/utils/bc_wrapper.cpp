@@ -9,34 +9,6 @@
 
 #include "tests/utils/helpers.hpp"
 
-std::function<std::string()> genRandBgN(size_t digits)
-{
-	if(digits == 0) return []() { return "0"; };
-
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> digitDist(0, 9);
-
-	auto generator = [gen, digitDist, digits]() mutable -> std::string {
-		std::string bgn;
-		bgn.reserve(digits);
-
-		int first;
-		do {
-			first = digitDist(gen);
-		} while(first == 0);
-		bgn.push_back('0' + first);
-
-		for(size_t i = 0; i < digits - 1; i++) {
-			int nextDigit = digitDist(gen);
-			bgn.push_back('0' + nextDigit);
-		}
-
-		return bgn;
-	};
-	return generator;
-}
-
 BcExec::BcExec()
 {
 	if(pipe2(pipe_in_, O_CLOEXEC) < 0 || pipe2(pipe_out_, O_CLOEXEC) < 0) {

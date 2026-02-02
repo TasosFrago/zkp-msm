@@ -1,5 +1,6 @@
 #include <random>
 
+#include "Primes.hpp"
 #include "bigint.hpp"
 #include "mod_arth.hpp"
 
@@ -96,7 +97,7 @@ struct TestModLogic {
 
 		// TODO: Implement generate prime function and replace hardcoded
 		uint64_t P = 1000000007ULL;
-		// uint64_t P = 10007;
+
 		__int128_t A_p = A + 1;
 
 		BigInt<N> a_p(A_p);

@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <functional>
+#include <random>
+#include <string>
 
 #include "bigint.hpp"
 
@@ -71,7 +73,58 @@ bga::BigInt<Bits> run_mod_bc(bga::BigInt<Bits> a, std::string_view op, bga::BigI
 #endif
 }
 
-std::function<std::string()> genRandBgN(size_t digits = 10);
+template <typename URBG>
+std::function<std::string()> genRandBgN(size_t digits, URBG &rng)
+{
+	if(digits == 0) return []() { return "0"; };
+
+	std::uniform_int_distribution<> digitDist(0, 9);
+
+	return [&rng, digitDist, digits]() mutable -> std::string {
+		std::string bgn;
+		bgn.reserve(digits);
+
+		int first;
+		do {
+			first = digitDist(rng);
+
+		} while(first == 0);
+		bgn.push_back('0' + first);
+
+		for(size_t i = 0; i < digits - 1; i++) {
+			bgn.push_back('0' + digitDist(rng));
+		}
+		return bgn;
+	};
+}
+
+inline std::function<std::string()> genRandBgN(size_t digits = 10)
+{
+	if(digits == 0) return []() { return "0"; };
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> digitDist(0, 9);
+
+	auto generator = [gen, digitDist, digits]() mutable -> std::string {
+		std::string bgn;
+		bgn.reserve(digits);
+
+		int first;
+		do {
+			first = digitDist(gen);
+		} while(first == 0);
+		bgn.push_back('0' + first);
+
+		for(size_t i = 0; i < digits - 1; i++) {
+			int nextDigit = digitDist(gen);
+			bgn.push_back('0' + nextDigit);
+		}
+
+		return bgn;
+	};
+	return generator;
+}
 
 template <typename Func>
 auto measure_time(Func &&func)

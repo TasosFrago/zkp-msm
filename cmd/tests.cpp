@@ -102,8 +102,6 @@ int main(int argc, char *argv[])
 
 	// std::exit(1);
 
-	std::println("Prime 17 {}", mda::get_primalityTester<32, mda::MONT_ALGO::FIOS>().is_prime(bga::BigInt<32>(17)));
-
 	TESTS.error_log_file = "error.log";
 
 	// register_primality_tests();

@@ -1,16 +1,27 @@
 #include <cstdlib>
+#include <string>
 
 #include "bigint.hpp"
 
 template <size_t Bits>
 struct StaticPrimes {
 
-	static inline constexpr bga::BigInt<Bits> primes_list[] = {
+	static inline const bga::BigInt<Bits> primes_list[] = {
 #include "primes.h"
 	};
 
-	static size_t count()
+	static inline constexpr std::string_view raw_literals[] = {
+#include "primes.h"
+	};
+
+	static constexpr size_t count()
 	{
-		return sizeof(primes_list) / sizeof(primes_list[0]);
+		return std::size(primes_list);
+		// return sizeof(primes_list) / sizeof(primes_list[0]);
+	}
+
+	static constexpr size_t get_length(size_t i)
+	{
+		return raw_literals[i].size();
 	}
 };

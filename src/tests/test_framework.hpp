@@ -26,7 +26,7 @@
 #define _STR_H(...) __STR_H(__VA_ARGS__)
 #define STR(X) _STR_H(X)
 
-// inline thread_local std::map<std::string, int> tls_success_buffer;
+inline thread_local std::map<std::string, int> tls_success_buffer;
 struct TestSuite {
 	bool parallel_exec = true;
 	using test_fn = std::function<void(void)>;
@@ -52,7 +52,7 @@ struct TestSuite {
 		bar.append(bar_width - filled, '-');
 		bar += "]";
 
-		return std::format("{:<30} {} {:3}%", name, bar, p);
+		return std::format("{:<40} {} {:3}%", name, bar, p);
 	}
 
 	void update_line(int row_index, const std::string &text)
@@ -77,6 +77,20 @@ struct TestSuite {
 	};
 
 	std::map<std::string, metrics> error_table;
+
+	int *get_local_success_ptr(const std::string &key)
+	{
+		return &tls_success_buffer[key];
+	}
+
+	void merge_thread_results()
+	{
+		std::lock_guard<std::mutex> lock(mtx);
+		for(const auto &[key, count] : tls_success_buffer) {
+			error_table[key].passed += count;
+		}
+		tls_success_buffer.clear();
+	}
 
 	void success(const std::string &key)
 	{
@@ -105,15 +119,22 @@ struct TestSuite {
 
 		std::string buf, error_buf;
 
+		size_t max_length = 0;
+		for(const auto &[key, _] : error_table) {
+			max_length = std::max(max_length, key.length());
+		}
+		max_length += 2;
+
 		std::println("\n==== RESULTS =====");
 		for(const auto &[key, value] : error_table) {
 			total_passed += value.passed;
 			total_failed += value.failed;
 
 			std::format_to(std::back_inserter(buf),
-				       "[{}] {:<28} [ \033[32mPassed: {:5}\033[0m ] [ \033[31mFailed: {:5}\033[0m ]\n",
+				       "[{}] {:<{}} [ \033[32mPassed: {:5}\033[0m ] [ \033[31mFailed: {:5}\033[0m ]\n",
 				       ((value.failed > 0) ? "\033[31mTEST\033[0m" : "\033[32mTEST\033[0m"),
-				       key, value.passed, value.failed);
+				       key, max_length,
+				       value.passed, value.failed);
 
 			if(value.failed > 0) {
 				std::format_to(std::back_inserter(error_buf), "{{{{{:-^7} Errors: {} {:-^7}\n", "", key, "");
@@ -183,6 +204,8 @@ struct TestSuite {
 			auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 			auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(duration);
 
+			this->merge_thread_results();
+
 			std::string msg = std::format("COMPLETED {:<50} [ \033[94m{:.3f}s\033[0m ]",
 						      name, seconds.count());
 			update_line(my_id + 1, msg);
@@ -242,6 +265,7 @@ constexpr std::string_view extract_Bits(std::string_view sig)
 	return "";
 }
 
+/*
 #define test_assert(key, N, expr1, expr2, msg, ...)                                                                   \
 	do {                                                                                                          \
 		if((expr1) != (expr2)) {                                                                              \
@@ -250,9 +274,33 @@ constexpr std::string_view extract_Bits(std::string_view sig)
 				       "{: ^4}[\033[31mFAILED\033[0m]:[{}] ({}): {} == ({}): {},\n{: ^8}" msg "\n\n", \
 				       "", (N),                                                                       \
 				       #expr1, (expr1), #expr2, (expr2), "" __VA_OPT__(, ) __VA_ARGS__);              \
-                                                                                                                      \
+														      \
 		} else {                                                                                              \
 			(TESTS).success(key);                                                                         \
+		}                                                                                                     \
+	} while(0)
+*/
+
+// Note: We use static thread_local to cache the pointer.
+// The expensive map lookup 'get_local_success_ptr' happens only
+// the FIRST time this specific line of code is hit by a thread.
+// Afterward, it just increments the integer directly.
+#define test_assert(key, N, expr1, expr2, msg, ...)                                                                   \
+	do {                                                                                                          \
+		static thread_local int *_p_success_counter = nullptr;                                                \
+		if(__builtin_expect(!_p_success_counter, 0)) {                                                        \
+			_p_success_counter = (TESTS).get_local_success_ptr(key);                                      \
+		}                                                                                                     \
+                                                                                                                      \
+		if((expr1) != (expr2)) {                                                                              \
+			/* SLOW PATH: Failure */                                                                      \
+			auto &buff = (TESTS).fail(key);                                                               \
+			std::format_to(std::back_inserter(buff),                                                      \
+				       "{: ^4}[\033[31mFAILED\033[0m]:[{}] ({}): {} == ({}): {},\n{: ^8}" msg "\n\n", \
+				       "", N,                                                                         \
+				       #expr1, (expr1), #expr2, (expr2), "" __VA_OPT__(, ) __VA_ARGS__);              \
+		} else {                                                                                              \
+			++(*_p_success_counter);                                                                      \
 		}                                                                                                     \
 	} while(0)
 

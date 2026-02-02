@@ -7,6 +7,7 @@ namespace ecc
 template <typename C, typename P>
 concept EllipticCurveConcept = requires(C curve, P point) {
 	{ C::bits } -> std::convertible_to<size_t>;
+	{ P::bits } -> std::convertible_to<size_t>;
 
 	{ curve.add(point, point) } -> std::same_as<P>;
 	{ curve.dbl(point) } -> std::same_as<P>;
@@ -25,6 +26,7 @@ namespace ecc
 template <size_t Bits>
 struct AffinePoint {
 	using FieldT = bga::BigInt<Bits>;
+	static constexpr size_t bits = Bits;
 
 	FieldT x, y;
 	bool is_inf = true;
@@ -46,6 +48,7 @@ struct AffinePoint {
 template <size_t Bits>
 struct JacobianPoint {
 	using FieldT = bga::BigInt<Bits>;
+	static constexpr size_t bits = Bits;
 
 	FieldT X, Y, Z;
 
@@ -125,6 +128,7 @@ public:
 		    std::move(mont.trans_back(R_m.y)));
 	}
 
+	// FIX: Need to add logic to return to dbl if P and Q are the same
 	auto add(const JacobianPoint<Bits> &P, const JacobianPoint<Bits> &Q) const -> JacobianPoint<Bits>
 	{
 		if(P.Z.is_zero()) return Q;

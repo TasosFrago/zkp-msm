@@ -11,174 +11,170 @@
 
 #include "test_framework.hpp"
 #include "tests.hpp"
+#include "tests/utils/helpers.hpp"
 
-struct TestECCLogic {
+template <typename T>
+consteval std::string_view type_name()
+{
+	std::string_view name = __PRETTY_FUNCTION__;
+
+	size_t start = name.find("T = ");
+	if(start == std::string_view::npos) return "Unknown";
+	start += 4;
+
+	size_t end = name.find_last_of('<');
+
+	return name.substr(start, end - start);
+}
+
+template <template <size_t> typename PointType, size_t N>
+auto make_point(const bga::BigInt<N> &x, const bga::BigInt<N> &y)
+{
+	using P = PointType<N>;
+	if constexpr(std::is_same_v<P, ecc::AffinePoint<N>>) {
+		return P(x, y);
+	} else if constexpr(std::is_same_v<P, ecc::JacobianPoint<N>>) {
+		return P(x, y, bga::BigInt<N>(1));
+	}
+	std::unreachable();
+}
+
+template <typename Curve, typename Point>
+	requires ecc::EllipticCurveConcept<Curve, Point>
+auto normalize(const Curve &curve, const Point &point)
+{
+	constexpr size_t Bits = Curve::bits;
+	if constexpr(std::is_same_v<Point, ecc::AffinePoint<Bits>>) {
+		return point;
+	} else if constexpr(std::is_same_v<Point, ecc::JacobianPoint<Bits>>) {
+		return curve.to_affine(point);
+	}
+	std::unreachable();
+}
+
+struct TestECCSmall_SWC {
 	template <size_t N>
 	void operator()(std::mt19937_64 &gen) const noexcept
 	{
-		// StaticPrimes<N>::primes_list;
 		using namespace ecc;
 		using FieldT = bga::BigInt<N>;
 
-		// ----------------------------------------------------------------
-		// 1. Small Curve Test: y^2 = x^3 + 2x + 2 mod 17
-		// Known points: (5, 1), (5, 16), (6, 3), (6, 14), ...
-		// ----------------------------------------------------------------
-		FieldT a(2), b(2), p(17);
-		ShortWeierstrassCurve<N> small_curve(a, b, p);
-
-		// P = (5, 1)
+		ShortWeierstrassCurve<N> curve(FieldT(2), FieldT(2), FieldT(17));
 		AffinePoint<N> P(FieldT(5), FieldT(1));
-		AffinePoint<N> Inf;
 
-		// Test 1: Is P on curve?
-		// Note: We need to pass P with coords in Mont domain to is_on_curve because it uses mont.mul
-		test_assert("ECC small on_curve", N, small_curve.is_on_curve(P), true, "Point (5,1) should be on curve");
+		test_assert("SmallCurve on curve test", N,
+			    curve.is_on_curve(P), true,
+			    "Point (5, 1) should be on curve");
 
-		// test_assert("Test", true, false, "Should fail");
-
-		// Test 2: P + Inf = P
-		auto R1 = small_curve.add(P, Inf);
-		test_assert("ECC small identity", N, R1 == P, true, "P + Inf should be P");
-
-		// Test 3: Doubling P(5,1)
-		// Slope lambda = (3x^2 + a) / 2y
-		// x = 5, y = 1
-		// num = 3(25) + 2 = 77 = 9 mod 17
-		// den = 2(1) = 2 mod 17
-		// inv(2) mod 17 = 9
-		// lambda = 9 * 9 = 81 = 13 mod 17
-		// x3 = lambda^2 - 2x = 169 - 10 = 16 - 10 = 6
-		// y3 = lambda(x - x3) - y = 13(5 - 6) - 1 = 13(-1) - 1 = -13 - 1 = -14 = 3
-		// Expected 2P = (6, 3)
-		auto P2 = small_curve.dbl(P);
-		test_assert("ECC small doubling", N,
+		auto P2 = curve.dbl(P);
+		test_assert("SmallCurve doubling", N,
 			    (P2.x == FieldT(6) && P2.y == FieldT(3)), true,
-			    "2P should be (6, 3). Got ({}, {})", P2.x, P2.y);
+			    "2P expected (6, 3) got P2 ({}, {})", P2.x, P2.y);
+	}
+};
 
-		// ----------------------------------------------------------------
-		// 2. Jacobian vs Affine Consistency (Secp256k1-like parameters)
-		// ----------------------------------------------------------------
-		// Curve: y^2 = x^3 + 7 mod P_secp
-		// P = 2^256 - 2^32 - 977 (Standard secp256k1 prime)
-		// We will simulate a random curve if N is small, or use standard parameters if N >= 256
-		// For generic testing, we'll generate random a, b, mod.
+template <
+    template <size_t> typename CurveT,
+    template <size_t> typename PointT>
+struct TestECCArithmetic {
+	template <size_t N>
+	void operator()(std::mt19937_64 &) const
+	{
+		assertm(false, "You shouldn't run this");
+	}
+};
 
-		std::uniform_int_distribution<uint64_t> dist;
+template <template <size_t> typename PointT>
+struct TestECCArithmetic<ecc::ShortWeierstrassCurve, PointT> {
+	static constexpr std::string_view point_name = type_name<PointT<0>>();
 
-		// Generate random modulus (ensure it's odd)
-		// To make it simple for the test framework, we generate 3 64-bit chunks for parameters if N allows
-		// uint64_t rand_MOD = dist(gen);
-		// FieldT rand_mod = FieldT(rand_MOD);
-		//
-		// if constexpr(N > 64) rand_mod = bga::OR(bga::lshift(rand_mod, 64), FieldT(dist(gen)));
-		// rand_mod = bga::OR(rand_mod, FieldT(1)); // Ensure odd
-		// if(rand_mod < FieldT(5)) rand_mod = FieldT(17);
-		// std::println("is prime: {}", mda::get_primalityTester<N, mda::MONT_ALGO::FIOS>().is_prime(FieldT("602965189904783654649202646197")));
-		FieldT rand_mod("602965189904783654649202646197");
+	template <size_t N>
+	void operator()(std::mt19937_64 &gen) const noexcept
+	{
+		using namespace ecc;
+		using FieldT = bga::BigInt<N>;
 
-		FieldT rand_a = mda::mod(FieldT(dist(gen)), rand_mod);
-		FieldT rand_b = mda::mod(FieldT(dist(gen)), rand_mod);
+		const auto &primes = StaticPrimes<N>::primes_list;
 
-		ShortWeierstrassCurve<N> curve(rand_a, rand_b, rand_mod);
+		std::uniform_int_distribution<size_t> p_dist(0, StaticPrimes<N>::count() - 1);
+		size_t p_idx = p_dist(gen);
 
-		// Generate a random valid point?
-		// Generating a valid point on a random curve is hard (needs square root).
-		// Instead: Pick x, y, then calculate b such that it is on curve.
-		// y^2 = x^3 + ax + b  =>  b = y^2 - x^3 - ax
-		FieldT Gx = mda::mod(FieldT(dist(gen)), rand_mod);
-		FieldT Gy = mda::mod(FieldT(dist(gen)), rand_mod);
+		FieldT mod_p = primes[p_idx];
+		size_t mod_p_size = StaticPrimes<N>::get_length(p_idx);
 
-		// Calculate b to force point to be on curve
-		auto Gx_m = curve.mont.init(Gx);
-		auto Gy_m = curve.mont.init(Gy);
-		auto Gy2 = curve.mont.mul(Gy_m, Gy_m);
-		auto Gx2 = curve.mont.mul(Gx_m, Gx_m);
-		auto Gx3 = curve.mont.mul(Gx2, Gx_m);
-		auto ax = curve.mont.mul(curve.a_m, Gx_m);
+		auto rng = genRandBgN(mod_p_size - 3, gen);
+		FieldT a{ rng() };
 
-		// b = y^2 - x^3 - ax
-		auto rhs_part = mda::add(Gx3, ax, rand_mod);
-		auto valid_b_m = mda::sub(Gy2, rhs_part, rand_mod);
-		FieldT valid_b = curve.mont.trans_back(valid_b_m);
+		FieldT Gx{ rng() };
+		FieldT Gy{ rng() };
 
-		// Re-initialize curve with the valid b
-		ShortWeierstrassCurve<N> valid_curve(rand_a, valid_b, rand_mod);
-		AffinePoint<N> G(Gx, Gy);
+		ShortWeierstrassCurve<N> tmp_curve{ a, FieldT(0), mod_p };
 
-		// Verify generation
-		test_assert("ECC gen point", N,
-			    valid_curve.is_on_curve(AffinePoint<N>(Gx, Gy)), true,
-			    "Generated G should be on curve");
+		auto Gx_m = tmp_curve.mont.init(Gx);
+		auto Gy_m = tmp_curve.mont.init(Gy);
+		auto Gy2 = tmp_curve.mont.mul(Gy_m, Gy_m);
+		auto Gx2 = tmp_curve.mont.mul(Gx_m, Gx_m);
+		auto Gx3 = tmp_curve.mont.mul(Gx2, Gx_m);
+		auto ax = tmp_curve.mont.mul(tmp_curve.a_m, Gx_m);
 
-		// ----------------------------------------------------------------
-		// 3. Compare Affine vs Jacobian Addition/Doubling
-		// ----------------------------------------------------------------
+		auto rhs = mda::add(Gx3, ax, mod_p);
+		auto b_m = mda::sub(Gy2, rhs, mod_p);
+		FieldT b = tmp_curve.mont.trans_back(b_m);
 
-		// Jacobian Point G (Z=1)
-		JacobianPoint<N> G_jac(Gx, Gy, FieldT(1));
+		ShortWeierstrassCurve<N> curve{ a, b, mod_p };
 
-		// Test: 2G (Affine) == 2G (Jacobian)
-		auto G2_aff = valid_curve.dbl(G);
-		auto G2_jac = valid_curve.dbl(G_jac);
+		AffinePoint<N> G_truth{ Gx, Gy };
 
-		// The Jacobian result stores X, Y, Z in MONTGOMERY domain based on your impl
-		// But let's check your impl:
-		// JacobianPoint constructor takes (x,y,z).
-		// Curve::dbl(Jacobian) -> returns JacobianPoint with raw values.
-		// Your Jacobian dbl implementation does:
-		// 		auto Pm = JacobianPoint<Bits>{ mont.init(P.X), ... }
-		//      ... math ...
-		//      return JacobianPoint{ mont.trans_back(T_m), ... }
-		// So it accepts Standard inputs and returns Standard outputs. Perfect.
+		test_assert("ECC G on curve", N,
+			    curve.is_on_curve(G_truth), true, "G should be on curve");
 
-		auto G2_jac_as_aff = valid_curve.to_affine(
-		    JacobianPoint<N>{
-			G2_jac.X,
-			G2_jac.Y,
-			G2_jac.Z });
+		auto G_test = make_point<PointT, N>(Gx, Gy);
 
-		test_assert("ECC dbl consistency", N,
-			    G2_aff == G2_jac_as_aff, true,
-			    "Affine and Jacobian doubling should match. Modululo = {}\n"
-			    "{: ^8}Aff(x: {}, y: {}),\n"
-			    "{: ^8}Jac_to_aff(x: {}, y: {})\n"
-			    "{: ^8}Jac(X: {}, Y: {}, Z: {})",
-			    valid_curve.modulus,
-			    "", G2_aff.x, G2_aff.y,
-			    "", G2_jac_as_aff.x, G2_jac_as_aff.y,
-			    "", G2_jac.X, G2_jac.Y, G2_jac.Z);
+		auto G2_truth = curve.dbl(G_truth);
+		auto G2_test = curve.dbl(G_test);
 
-		// Check if 2G is on curve
-		test_assert("ECC 2G on curve", N,
-			    valid_curve.is_on_curve(G2_aff), true,
-			    "2G should be on curve");
+		auto G2_norm = normalize(curve, G2_test);
 
-		// Test: 3G = 2G + G
-		auto G3_aff = valid_curve.add(G, G2_aff);
-		auto G3_jac = valid_curve.add(G_jac, G2_jac);
+		test_assert(
+		    std::format("ECC Doubling {}", point_name), N,
+		    (G2_norm == G2_truth), true,
+		    "Doubling failed for mod {}", mod_p);
 
-		auto G3_jac_as_aff = valid_curve.to_affine(
-		    JacobianPoint<N>{
-			G3_jac.X,
-			G3_jac.Y,
-			G3_jac.Z });
+		test_assert(
+		    std::format("ECC 2G on the curve {}", point_name), N,
+		    curve.is_on_curve(G2_norm), true,
+		    "Should be on the curve");
 
-		test_assert("ECC add consistency", N,
-			    G3_aff == G3_jac_as_aff, true,
-			    "Affine and Jacobian addition should match (3G)");
+		auto G3_truth = curve.add(G2_truth, G_truth);
+		auto G3_test = curve.add(G2_test, G_test);
 
-		// Check if 3G is on curve
-		test_assert("ECC 3G on curve", N,
-			    valid_curve.is_on_curve(G3_aff), true,
-			    "3G should be on curve");
+		auto G3_norm = normalize(curve, G3_test);
+
+		test_assert(std::format("ECC Addition {}", point_name), N,
+			    G3_norm == G3_truth, true,
+			    "Addition failed (3G) for mod {}", mod_p);
+
+		test_assert(
+		    std::format("ECC 3G on curve {}", point_name), N,
+		    curve.is_on_curve(G3_norm), true,
+		    "Should be on the curve");
 	}
 };
 
 void register_ecc_tests()
 {
 	TESTS.register_test<BITS_TEST_MOD___N>(
-	    "Elliptic Curve Arithmetic",
-	    MOD_BATCHES,
-	    TestECCLogic{});
+	    "ECC ShortWeierstrass simple tests",
+	    1,
+	    TestECCSmall_SWC{});
+
+	TESTS.register_test<BITS_TEST_MOD___N>(
+	    "ECC ShortWeierstrass Affine arth",
+	    400,
+	    TestECCArithmetic<ecc::ShortWeierstrassCurve, ecc::AffinePoint>{});
+
+	TESTS.register_test<BITS_TEST_MOD___N>(
+	    "ECC ShortWeierstrass Jacobian arth",
+	    400,
+	    TestECCArithmetic<ecc::ShortWeierstrassCurve, ecc::JacobianPoint>{});
 }
