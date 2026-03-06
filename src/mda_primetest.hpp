@@ -1,5 +1,7 @@
 #pragma once
 #include <bit>
+#include <cstdint>
+#include <limits>
 #include <mutex>
 #include <random>
 #include <shared_mutex>
@@ -49,7 +51,13 @@ private:
 	{
 		auto &rng = get_rng();
 		auto n_minus_4 = bga::sub(n, bga::BigInt<Bits>(4));
-		std::uniform_int_distribution<uint64_t> dist;
+
+		using uint = typename bga::SelectIntType_t<Bits>::uint_t;
+		using uintD = typename bga::SelectIntType_t<Bits>::uintd_t;
+
+		constexpr uint mask = (uintD)(static_cast<uintD>(1) << Bits) - 1;
+
+		std::uniform_int_distribution<uint64_t> dist(0, std::numeric_limits<uint>::max());
 		size_t chunks = n.get_chunks();
 
 		while(true) {
@@ -57,22 +65,38 @@ private:
 			a.reserve(chunks);
 
 			for(size_t i = 0; i < chunks; i++) {
-				// bga::BigInt<Bits> chunk_val(dist(rng));
-				uint64_t r_val = rng();
+				uint r_val = static_cast<uint>(dist(rng)) & mask;
 
 				if(i == chunks - 1) {
-					uint64_t top = n.get(i);
+					uint top = n.get(i);
+
 					if(top > 0) {
-						int leading_zeros = std::countl_zero(top);
-						uint64_t mask = (0xFFFFFFFFFFFFFFFFULL >> leading_zeros);
-						r_val &= mask;
+						int leading_zeros = std::countl_zero(static_cast<uint64_t>(top));
+						uint64_t top_mask = (0xFFFFFFFFFFFFFFFFULL >> leading_zeros);
+						r_val &= static_cast<uint>(top_mask);
 					}
 				}
-				a.push_bits(static_cast<typename bga::SelectIntType_t<Bits>::uint_t>(r_val));
-				// a = bga::add(a, bga::lshift(bga::BigInt<Bits>(r_val), i * Bits));
+				a.push_bits(r_val);
 			}
 			a.trim();
 			if(a > bga::BigInt<Bits>(0) && a <= n_minus_4) return bga::add(a, bga::BigInt<Bits>(2));
+
+			// for(size_t i = 0; i < chunks; i++) {
+			// 	uint64_t r_val = rng();
+			//
+			// 	if(i == chunks - 1) {
+			// 		uint64_t top = n.get(i);
+			// 		if(top > 0) {
+			// 			int leading_zeros = std::countl_zero(top);
+			// 			uint64_t mask = (0xFFFFFFFFFFFFFFFFULL >> leading_zeros);
+			// 			r_val &= mask;
+			// 		}
+			// 	}
+			// 	a.push_bits(static_cast<typename bga::SelectIntType_t<Bits>::uint_t>(r_val));
+			// 	// a = bga::add(a, bga::lshift(bga::BigInt<Bits>(r_val), i * Bits));
+			// }
+			// a.trim();
+			// if(a > bga::BigInt<Bits>(0) && a <= n_minus_4) return bga::add(a, bga::BigInt<Bits>(2));
 		}
 		std::unreachable();
 	}

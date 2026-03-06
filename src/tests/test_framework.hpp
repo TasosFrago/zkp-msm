@@ -190,13 +190,18 @@ struct TestSuite {
 			std::random_device rd;
 			std::mt19937_64 gene(rd());
 
+			update_line(my_id + 1, make_progress_bar(name, 0, 100));
+
 			auto start_time = std::chrono::high_resolution_clock::now();
+
+			size_t interval = (batches > 100) ? (batches / 100) : 1;
 
 			for(size_t i = 0; i < batches; i++) {
 				(logic.template operator()<Ns>(gene), ...);
 
-				if(batches > 100 && i % (batches / 100) == 0) {
-					int percent = (i * 100) / batches;
+				// if(batches > 100 && i % (batches / 100) == 0) {
+				if(i % interval == 0 || i == batches - 1) {
+					int percent = (batches > 100) ? ((i + 1) * 100) / batches : batches;
 					update_line(my_id + 1, make_progress_bar(name, percent, 100));
 				}
 			}
@@ -204,7 +209,7 @@ struct TestSuite {
 			auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 			auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(duration);
 
-			this->merge_thread_results();
+			// this->merge_thread_results();
 
 			std::string msg = std::format("COMPLETED {:<50} [ \033[94m{:.3f}s\033[0m ]",
 						      name, seconds.count());
@@ -265,7 +270,6 @@ constexpr std::string_view extract_Bits(std::string_view sig)
 	return "";
 }
 
-/*
 #define test_assert(key, N, expr1, expr2, msg, ...)                                                                   \
 	do {                                                                                                          \
 		if((expr1) != (expr2)) {                                                                              \
@@ -274,18 +278,17 @@ constexpr std::string_view extract_Bits(std::string_view sig)
 				       "{: ^4}[\033[31mFAILED\033[0m]:[{}] ({}): {} == ({}): {},\n{: ^8}" msg "\n\n", \
 				       "", (N),                                                                       \
 				       #expr1, (expr1), #expr2, (expr2), "" __VA_OPT__(, ) __VA_ARGS__);              \
-														      \
+                                                                                                                      \
 		} else {                                                                                              \
 			(TESTS).success(key);                                                                         \
 		}                                                                                                     \
 	} while(0)
-*/
 
 // Note: We use static thread_local to cache the pointer.
 // The expensive map lookup 'get_local_success_ptr' happens only
 // the FIRST time this specific line of code is hit by a thread.
 // Afterward, it just increments the integer directly.
-#define test_assert(key, N, expr1, expr2, msg, ...)                                                                   \
+#define test_assert__(key, N, expr1, expr2, msg, ...)                                                                 \
 	do {                                                                                                          \
 		static thread_local int *_p_success_counter = nullptr;                                                \
 		if(__builtin_expect(!_p_success_counter, 0)) {                                                        \

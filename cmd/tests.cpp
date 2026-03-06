@@ -25,7 +25,6 @@ int main(int argc, char *argv[])
 	if(argc > 1 && std::string(argv[1]) == "--serial") {
 		TESTS.parallel_exec = false;
 	}
-	// TESTS.parallel_exec = false;
 
 	// __int128_t a = -8175231853481960273;
 	// bga::bgint<4> d(a);
@@ -100,6 +99,7 @@ int main(int argc, char *argv[])
 	// auto P2 = small_curve.dbl(P);
 	// std::println("P ({}, {}), expected (6, 3) got -> P2 ({}, {})", P.x, P.y, P2.x, P2.y);
 
+	// std::println("test {}", mda::get_primalityTester<8, mda::MONT_ALGO::FIOS>().is_prime("733010563"));
 	// std::exit(1);
 
 	TESTS.error_log_file = "error.log";

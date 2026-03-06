@@ -43,10 +43,12 @@ elseif is_mode("profile") then
 	set_optimize("fastest")
 	set_symbols("debug")
 	set_strip("none")
-	add_cxflags("-gdwarf-4", "-fno-omit-frame-pointer")
+	add_cxflags("-g", "-fno-omit-frame-pointer")
 	add_defines("NDEBUG")
 end
 
+
+-- TARGETS
 target("primesGen")
 	set_kind("binary")
 	set_default(false)

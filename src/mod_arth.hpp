@@ -87,7 +87,7 @@ template <size_t Bits>
 BigInt<Bits> sub(const BigInt<Bits> &a, const BigInt<Bits> &b, const BigInt<Bits> &q)
 {
 	static_assert(Bits <= 64 && "Can't support larger bits sizes");
-	assert(a < q && b < q && "a and b need to be smaller than q");
+	assertm(a < q && b < q, "a and b need to be smaller than q. a: {}, b: {}, q: {}", a, b, q);
 	using bga::add_mag;
 	using bga::sub_mag;
 
@@ -382,7 +382,7 @@ public:
 		for(size_t i = 0; i < n_chunks; i++) {
 			uint b_i = b.get_safe(i);
 
-			uintDouble tmp_mult = (uintDouble)t.get(0) + (uintDouble)a.get(0) * (uintDouble)b_i;
+			uintDouble tmp_mult = (uintDouble)t.get(0) + (uintDouble)a.get_safe(0) * (uintDouble)b_i;
 
 			uintDouble carry_mul = tmp_mult >> Bits; // C1
 			uint sum_mul = (tmp_mult & mask);
@@ -482,7 +482,7 @@ public:
  * @param q The modulus.
  * @return BigInt<Bits> representing (ab mod q).
  */
-template <size_t Bits, MONT_ALGO algo, bool Normalize = false>
+template <size_t Bits, MONT_ALGO algo = MONT_ALGO::FIOS, bool Normalize = false>
 BigInt<Bits> mul(BigInt<Bits> a, BigInt<Bits> b, BigInt<Bits> q)
 {
 	Montgomery<Bits, algo> mont(q);
