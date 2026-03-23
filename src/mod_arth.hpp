@@ -145,8 +145,7 @@ private:
 	/**
 	 * @brief Calculates the Montgomery constant n' using Newton's method.
 	 */
-	static constexpr uint
-	calc_n_p(uint n0)
+	static constexpr uint calc_n_p(uint n0)
 	{
 		// n0 &= mask;
 		uint x = 1;
@@ -361,23 +360,23 @@ public:
 		uintDouble mask = (static_cast<uintDouble>(1) << Bits) - 1;
 
 		/*
-		 *   t[j]      n     a[j]
+		 *   t[j]      n[j]   a[j]
 		 *     \       |      |
 		 *      \      |      |
-		 *       \     V      V
-		 *	  +----------------+
-		 *	  |                |
+		 *       V     V      V
+		 *        +----------------+
+		 *        |                |
 		 *   <----|                |<---- (c_mul, c_red)
 		 *        |                |
 		 *   <----|       PE       |<---- b[i]
 		 *        |                |
 		 *   <----|                |<---- m
-		 *	  |                |
-		 *	  +----+------+----+
-		 *	       |      |     \
-		 *	       |      |      \
-		 *	       V      V       \
-		 *                            t[j-1]
+		 *        |                |
+		 *        +----+------+----+
+		 *             |      |     \
+		 *             |      |      \
+		 *             V      V       \
+		 *                             t[j-1]
 		 */
 		for(size_t i = 0; i < n_chunks; i++) {
 			uint b_i = b.get_safe(i);

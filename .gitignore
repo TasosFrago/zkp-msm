@@ -6,3 +6,7 @@ compile_commands.json
 docs/
 *.log
 *.data
+
+*.fst
+*.vcd
+*.gtkw

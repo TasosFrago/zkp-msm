@@ -1,0 +1,6 @@
+CompileFlags:
+  Add:
+    - "-I../src"
+    - "-I../sim"
+    - "-I/usr/share/verilator/include"
+    - "-I/usr/share/verilator/include/vltstd"
