@@ -6,9 +6,11 @@ module mmul_top_tb #(
     input logic clk,
     input logic rst,
 
-    input  logic [(NUMBER_SIZE / W)-1:0][W-1:0] a,
-    input  logic [(NUMBER_SIZE / W)-1:0][W-1:0] b,
-    output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res
+    input logic [(NUMBER_SIZE / W)-1:0][W-1:0] a,
+    input logic [(NUMBER_SIZE / W)-1:0][W-1:0] b,
+
+    output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res_n,
+    output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res_p
 );
 
     mmul #(
@@ -21,7 +23,20 @@ module mmul_top_tb #(
         .rst(rst),
         .a  (a),
         .b  (b),
-        .res(res)
+        .res(res_n)
+    );
+
+    mmul #(
+        .NUMBER_SIZE(NUMBER_SIZE),
+        .W(W),
+        .MODULUS(MODULUS),
+        .CORE_TYPE("PIPE")
+    ) dut_pipe (
+        .clk(clk),
+        .rst(rst),
+        .a  (a),
+        .b  (b),
+        .res(res_p)
     );
 
 endmodule : mmul_top_tb

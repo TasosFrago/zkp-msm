@@ -14,7 +14,9 @@ TOP_MOD := mmul_top_tb
 HDL_SRCS := $(RTL_DIR)/pe_rightmost.sv \
 	    $(RTL_DIR)/pe_standard.sv \
 	    $(RTL_DIR)/systolic_array.sv \
+	    $(RTL_DIR)/cmul.sv \
 	    $(RTL_DIR)/mmul.sv \
+	    $(ROOT_DIR)/rtl/curve_pkg.sv \
 	    $(ROOT_DIR)/sim/mm/mmul_top_tb.sv
 
 TB_SRC := mmul_tb.cpp

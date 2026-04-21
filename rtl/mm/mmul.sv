@@ -35,6 +35,38 @@ module mmul #(
             ) mod (
                 .*
             );
+
+        end else if (CORE_TYPE == "PIPE") begin : g_pipelined
+            localparam int CHUNKS = (NUMBER_SIZE / W);
+            logic [CHUNKS-1:0][W-1:0] a_in;
+            logic [CHUNKS-1:0][W-1:0] b_in;
+
+            always_ff @(posedge clk) begin
+                if (rst) begin
+                    a_in <= '0;
+                    b_in <= '0;
+
+                end else begin
+                    for (int i = 0; i < CHUNKS; i++) begin
+                        a_in[i] <= a[i];
+                        b_in[i] <= b[i];
+                    end
+                end
+            end
+
+            systolic_array_pipe #(
+                .W(W),
+                .CHUNKS(CHUNKS),
+                .MODULUS(MODULUS),
+                .N_PRIME(calc_np(MODULUS[W-1:0]))
+            ) mod (
+                .clk(clk),
+                .rst(rst),
+
+                .a  (a_in),
+                .b  (b_in),
+                .res(res)
+            );
         end
     endgenerate
 
