@@ -8,5 +8,6 @@ docs/
 *.data
 
 *.fst
+*.fst.hier
 *.vcd
 *.gtkw

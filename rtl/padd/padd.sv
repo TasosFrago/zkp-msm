@@ -18,19 +18,13 @@ module padd #(
     localparam int CHUNKS = (NUMBER_SIZE / W);
     localparam int MUL_LAT = 3 * CHUNKS;
     localparam int ADD_LAT = CHUNKS + 1;
-    localparam int THREAD_CNT = 16;
+    localparam int THREAD_CNT  /* verilator public */ = 20;
     localparam int LOAD_STEPS = 3;
 
     import instr_pkg::*;
 
-    localparam type alu_tag_t = alu_metadata#(
-        .W(W),
-        .TID_BITS($clog2(THREAD_CNT))
-    )::tag_t;
-    localparam type alu_dest_t = alu_metadata#(
-        .W(W),
-        .TID_BITS($clog2(THREAD_CNT))
-    )::dest_t;
+    localparam type alu_tag_t = alu_metadata#(.TID_BITS($clog2(THREAD_CNT)))::tag_t;
+    localparam type alu_dest_t = alu_metadata#(.TID_BITS($clog2(THREAD_CNT)))::dest_t;
 
     logic [$clog2(THREAD_CNT)-1:0] active_tid;
     logic [THREAD_CNT-1:0] active_threads_map;
@@ -77,12 +71,19 @@ module padd #(
     logic [THREAD_CNT-1:0] current_1hot, next_1hot, upper_threads;
     logic [$clog2(THREAD_CNT)-1:0] next_tid;
 
-    assign current_1hot = 1'b1 << active_tid;
-    assign upper_threads = active_threads_map & ~((current_1hot << 1) - 1'b1);
+    assign active_threads_map = control_path_active ? '1 : '0;
 
-    assign next_1hot = upper_threads ?
-          (upper_threads & -upper_threads)
-        : (active_threads_map & -active_threads_map);
+    logic [THREAD_CNT-1:0] sched_map, inflight_mask;
+
+    assign inflight_mask = (s1_reg.valid ? (1 << s1_reg.tid) : '0) |
+                           (s2_reg.valid ? (1 << s2_reg.tid) : '0);
+
+    assign sched_map = active_threads_map & ~inflight_mask;
+
+    assign current_1hot = 1'b1 << active_tid;
+    assign upper_threads = sched_map & ~((current_1hot << 1) - 1'b1);
+
+    assign next_1hot = |upper_threads ? (upper_threads & -upper_threads) : (sched_map & -sched_map);
 
     always_comb begin
         next_tid = '0;
@@ -97,7 +98,7 @@ module padd #(
         if (rst) begin
             s1_reg <= '{default: '0};
             active_tid <= '0;
-            active_threads_map <= '0;
+            // active_threads_map <= '0;
             active_side <= '0;
             init_flush <= '0;
             init_flush_tid <= '0;
@@ -109,15 +110,10 @@ module padd #(
             init_flush <= '0;
             reg_flush  <= '0;
 
-            if (control_path_active) begin
-                if (pc[active_tid] == NUM_OPS) begin
-                    // TODO:
-                    // * ~switch active side~
-                    // * ~empty active_tid's init_vals~
-                    // * ~zero pc[tid]~
-
+            if (control_path_active && sched_map[active_tid]) begin
+                if (pc[active_tid] == 5'(NUM_OPS)) begin
                     init_flush_side <= active_side[active_tid];
-                    active_side[active_tid] <= ~active_side[active_tid];
+                    active_side[active_tid] <= !active_side[active_tid];
 
                     init_flush <= 1'b1;
                     init_flush_tid <= active_tid;
@@ -126,7 +122,6 @@ module padd #(
                     reg_flush_tid <= active_tid;
 
                     s1_reg.valid <= 1'b0;
-                    active_tid <= next_tid;
                 end
                 else begin
                     s1_reg.valid <= 1'b1;
@@ -134,12 +129,12 @@ module padd #(
                     s1_reg.pc <= pc[active_tid];
                     s1_reg.instr <= instr_rom[pc[active_tid]];
                     s1_reg.finished <= 1'b0;
-
-                    active_tid <= next_tid;
                 end
+                active_tid <= next_tid;
             end
             else begin
                 s1_reg.valid <= 0;
+                if (|sched_map) active_tid <= next_tid;
             end
         end
     end
@@ -150,11 +145,12 @@ module padd #(
             pc <= '{default: '0};
         end
         else begin
-            if (pc[active_tid] == NUM_OPS && control_path_active) begin
-                pc[active_tid] <= '0;
-            end
-            else if (s2_reg.valid && s2_reg.deps_met) begin
+            if (s2_reg.valid && s2_reg.deps_met) begin
                 pc[s2_reg.tid] <= pc[s2_reg.tid] + 1;
+            end
+
+            if (pc[active_tid] == 5'(NUM_OPS) && control_path_active && sched_map[active_tid]) begin
+                pc[active_tid] <= '0;
             end
         end
     end
@@ -237,7 +233,8 @@ module padd #(
     logic [$clog2(THREAD_CNT)-1:0] load_tid;
     logic load_side;
 
-    assign rdy_in = ~control_path_active | (load_side != active_side[load_tid]);
+    // assign rdy_in = ~control_path_active | (load_side != active_side[load_tid]);
+    assign rdy_in = (~control_path_active | (load_side != active_side[load_tid])) & ~init_flush;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -248,10 +245,10 @@ module padd #(
         end
         else begin
             if (vld_in & rdy_in) begin
-                if (load_step == (LOAD_STEPS - 1)) begin
+                if (load_step == 2'(LOAD_STEPS - 1)) begin
                     load_step <= '0;
 
-                    if (load_tid == THREAD_CNT - 1) begin
+                    if (load_tid == $clog2(THREAD_CNT)'(THREAD_CNT - 1)) begin
                         load_tid <= '0;
                         load_side <= ~load_side;
 
@@ -268,13 +265,19 @@ module padd #(
         end
     end
 
+    localparam int INIT_MAX_DEPTH = 3;
+    localparam int INIT_MAX_DEPTH_W = $clog2(INIT_MAX_DEPTH);
+
     regfile #(
         .NUMBER_SIZE(NUMBER_SIZE),
         .W(W),
         .MAX_THREADS(THREAD_CNT),
         .BANK_SLOTS('{3, 3, 3, 3}),
-        .MAX_DEPTH(3)
+        .MAX_DEPTH(INIT_MAX_DEPTH)
     ) init_vals_regfile (
+        .clk(clk),
+        .rst(rst),
+
         // Write Port A
         .wr_data_A(bus0_in),
         .wr_en_A  (vld_in & rdy_in),
@@ -294,26 +297,26 @@ module padd #(
         .rd_en_A  (s2_reg.valid & s2_reg.instr.src_a.is_init),
         .rd_bank_A(s2_reg.instr.src_a.bank + (active_side[s2_reg.tid] ? 2'd2 : 2'd0)),
         .rd_tid_A (s2_reg.tid),
-        .rd_idx_A (s2_reg.instr.src_a.idx),
+        .rd_idx_A (INIT_MAX_DEPTH_W'(s2_reg.instr.src_a.idx)),
 
         // Read Port B
         .rd_data_B(init_data_B),
         .rd_en_B  (s2_reg.valid & s2_reg.instr.src_b.is_init & ~same_srcs),
         .rd_bank_B(s2_reg.instr.src_b.bank + (active_side[s2_reg.tid] ? 2'd2 : 2'd0)),
         .rd_tid_B (s2_reg.tid),
-        .rd_idx_B (s2_reg.instr.src_b.idx),
+        .rd_idx_B (INIT_MAX_DEPTH_W'(s2_reg.instr.src_b.idx)),
 
         // Vld Read Port A
         .rd_vld_A(init_vld_a),
         .rd_vld_bank_A(s1_init_bank_a),
         .rd_vld_tid_A(s1_reg.tid),
-        .rd_vld_idx_A(s1_reg.instr.src_a.idx),
+        .rd_vld_idx_A(INIT_MAX_DEPTH_W'(s1_reg.instr.src_a.idx)),
 
         // Vld Read Port B
         .rd_vld_B(init_vld_b),
         .rd_vld_bank_B(s1_init_bank_b),
         .rd_vld_tid_B(s1_reg.tid),
-        .rd_vld_idx_B(s1_reg.instr.src_b.idx),
+        .rd_vld_idx_B(INIT_MAX_DEPTH_W'(s1_reg.instr.src_b.idx)),
 
         // Flush
         .flush_vld(init_flush),
@@ -328,6 +331,9 @@ module padd #(
         .BANK_SLOTS('{8, 5, 2, 2}),
         .MAX_DEPTH(8)
     ) val_regfile (
+        .clk(clk),
+        .rst(rst),
+
         // Write Port A
         .wr_data_A(add_out),
         .wr_en_A  (add_tag_out.vld_tag),
@@ -386,7 +392,7 @@ module padd #(
         // In
         .op  (vld_issue ? s3_reg.instr.op : OP_NOOP),
         .tid (s3_reg.tid),
-        .dest(s3_reg.instr.dest),
+        .dest('{bank: s3_reg.instr.dest.bank, idx: s3_reg.instr.dest.idx}),
         .in_a(alu_inA),
         .in_b(alu_inB),
 
@@ -394,7 +400,7 @@ module padd #(
         .add_out(add_out),
         .add_tag_out(add_tag_out),
         .mul_out(mul_out),
-        .mul_tag_out(mul_tag_out),
+        .mul_tag_out(mul_tag_out)
     );
 
     // ==================================================
@@ -415,30 +421,32 @@ module padd #(
     assign is_ZZZ3_mul = mul_tag_out.vld_tag &
         (mul_tag_out.dest.bank == ZZZ3.bank) & (mul_tag_out.dest.idx == ZZZ3.idx);
 
-    logic [NUMBER_SIZE-1:0] out_buf_X3[THREAD_CNT];
-    logic [NUMBER_SIZE-1:0] out_buf_Y3[THREAD_CNT];
-    logic [NUMBER_SIZE-1:0] out_buf_ZZ3[THREAD_CNT];
+    logic [NUMBER_SIZE-1:0] out_buf_X3  [THREAD_CNT];
+    logic [NUMBER_SIZE-1:0] out_buf_Y3  [THREAD_CNT];
+    logic [NUMBER_SIZE-1:0] out_buf_ZZ3 [THREAD_CNT];
     logic [NUMBER_SIZE-1:0] out_buf_ZZZ3[THREAD_CNT];
 
-    logic [$clog2(THREAD_CNT)-1:0] ready_fifo[THREAD_CNT];
-    logic [$clog2(THREAD_CNT)-1:0] fifo_wr_ptr, fifo_rd_ptr;
-    logic fifo_empty;
-
-    assign fifo_empty = (fifo_wr_ptr == fifo_rd_ptr);
+    logic [ THREAD_CNT-1:0] done_flags;
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            fifo_wr_ptr <= '0;
+            done_flags <= '0;
         end
         else begin
+            if (stream_step == 3'd4 && done_flags[stream_tid]) begin
+                done_flags[stream_tid] <= 1'b0;
+            end
+
             if (is_X3_add) out_buf_X3[add_tag_out.tid] <= add_out;
             if (is_ZZ3_mul) out_buf_ZZ3[mul_tag_out.tid] <= mul_out;
             if (is_ZZZ3_mul) out_buf_ZZZ3[mul_tag_out.tid] <= mul_out;
 
             if (is_Y3_add) begin
                 out_buf_Y3[add_tag_out.tid] <= add_out;
-                ready_fifo[fifo_wr_ptr%THREAD_CNT] <= add_tag_out.tid;
-                fifo_wr_ptr <= fifo_wr_ptr + 1;
+                done_flags[add_tag_out.tid] <= 1'b1;
+
+                // reg_flush <= 1'b1;
+                // reg_flush_tid <= add_tag_out.tid;
             end
         end
     end
@@ -450,16 +458,13 @@ module padd #(
         if (rst) begin
             stream_step <= '0;
             stream_tid  <= '0;
-            fifo_rd_ptr <= '0;
             valid_out   <= '0;
         end
         else begin
             valid_out <= 1'b0;
 
             if (stream_step == 0) begin
-                if (!fifo_empty) begin
-                    stream_tid  <= ready_fifo[fifo_rd_ptr%THREAD_CNT];
-                    fifo_rd_ptr <= fifo_rd_ptr + 1;
+                if (done_flags[stream_tid]) begin
                     stream_step <= 3'd1;
                 end
             end
@@ -476,6 +481,9 @@ module padd #(
 
                 if (stream_step == 3'd4) begin
                     stream_step <= 3'd0;
+                    stream_tid <= (stream_tid == ($clog2(
+                        THREAD_CNT
+                    ))'(THREAD_CNT - 1)) ? '0 : stream_tid + 1'b1;
                 end
                 else begin
                     stream_step <= stream_step + 1;

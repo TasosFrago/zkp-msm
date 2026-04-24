@@ -1,5 +1,4 @@
 virtual class alu_metadata #(
-    parameter int W = 32,
     parameter int TID_BITS = 5
 );
     typedef struct packed {
@@ -25,14 +24,8 @@ module alu
 
     localparam int CHUNKS = (NUMBER_SIZE / W),
     localparam int TID_BITS = $clog2(THREAD_CNT),
-    localparam type tag_t = alu_metadata#(
-        .W(W),
-        .TID_BITS(TID_BITS)
-    )::tag_t,
-    localparam type dest_t = alu_metadata#(
-        .W(W),
-        .TID_BITS(TID_BITS)
-    )::dest_t
+    localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t,
+    localparam type dest_t = alu_metadata#(.TID_BITS(TID_BITS))::dest_t
 ) (
     input logic clk,
     input logic rst,
@@ -115,10 +108,7 @@ module tag_shiftreg #(
     parameter int DEPTH = 24,
     parameter int TID_BITS = 5,
 
-    localparam type tag_t = alu_metadata#(
-        .W(W),
-        .TID_BITS(TID_BITS)
-    )::tag_t
+    localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t
 ) (
     input logic clk,
     input logic rst,

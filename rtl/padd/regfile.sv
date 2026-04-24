@@ -58,25 +58,30 @@ module regfile #(
     logic [BANK_SLOTS[2]-1:0] vld_bank2[MAX_THREADS];
     logic [BANK_SLOTS[3]-1:0] vld_bank3[MAX_THREADS];
 
+    localparam int ADDR_W0 = $clog2(MAX_THREADS * BANK_SLOTS[0]);
+    localparam int ADDR_W1 = $clog2(MAX_THREADS * BANK_SLOTS[1]);
+    localparam int ADDR_W2 = $clog2(MAX_THREADS * BANK_SLOTS[2]);
+    localparam int ADDR_W3 = $clog2(MAX_THREADS * BANK_SLOTS[3]);
+
     // WRITE Data Port
     always_ff @(posedge clk) begin
         // Write Port A
         if (wr_en_A) begin
             unique case (wr_bank_A)
-                2'd0: mem_bank0[(wr_tid_A*BANK_SLOTS[0])+wr_idx_A] <= wr_data_A;
-                2'd1: mem_bank1[(wr_tid_A*BANK_SLOTS[1])+wr_idx_A] <= wr_data_A;
-                2'd2: mem_bank2[(wr_tid_A*BANK_SLOTS[2])+wr_idx_A] <= wr_data_A;
-                2'd3: mem_bank3[(wr_tid_A*BANK_SLOTS[3])+wr_idx_A] <= wr_data_A;
+                2'd0: mem_bank0[ADDR_W0'(wr_tid_A*BANK_SLOTS[0])+ADDR_W0'(wr_idx_A)] <= wr_data_A;
+                2'd1: mem_bank1[ADDR_W1'(wr_tid_A*BANK_SLOTS[1])+ADDR_W1'(wr_idx_A)] <= wr_data_A;
+                2'd2: mem_bank2[ADDR_W2'(wr_tid_A*BANK_SLOTS[2])+ADDR_W2'(wr_idx_A)] <= wr_data_A;
+                2'd3: mem_bank3[ADDR_W3'(wr_tid_A*BANK_SLOTS[3])+ADDR_W3'(wr_idx_A)] <= wr_data_A;
             endcase
         end
 
         // Write Port B
         if (wr_en_B) begin
             unique case (wr_bank_B)
-                2'd0: mem_bank0[(wr_tid_B*BANK_SLOTS[0])+wr_idx_B] <= wr_data_B;
-                2'd1: mem_bank1[(wr_tid_B*BANK_SLOTS[1])+wr_idx_B] <= wr_data_B;
-                2'd2: mem_bank2[(wr_tid_B*BANK_SLOTS[2])+wr_idx_B] <= wr_data_B;
-                2'd3: mem_bank3[(wr_tid_B*BANK_SLOTS[3])+wr_idx_B] <= wr_data_B;
+                2'd0: mem_bank0[ADDR_W0'(wr_tid_B*BANK_SLOTS[0])+ADDR_W0'(wr_idx_B)] <= wr_data_B;
+                2'd1: mem_bank1[ADDR_W1'(wr_tid_B*BANK_SLOTS[1])+ADDR_W1'(wr_idx_B)] <= wr_data_B;
+                2'd2: mem_bank2[ADDR_W2'(wr_tid_B*BANK_SLOTS[2])+ADDR_W2'(wr_idx_B)] <= wr_data_B;
+                2'd3: mem_bank3[ADDR_W3'(wr_tid_B*BANK_SLOTS[3])+ADDR_W3'(wr_idx_B)] <= wr_data_B;
             endcase
         end
     end
@@ -98,19 +103,19 @@ module regfile #(
         else begin
             if (wr_en_A) begin
                 unique case (wr_bank_A)
-                    2'd0: vld_bank0[wr_tid_A][wr_idx_A] <= 1'b1;
-                    2'd1: vld_bank1[wr_tid_A][wr_idx_A] <= 1'b1;
-                    2'd2: vld_bank2[wr_tid_A][wr_idx_A] <= 1'b1;
-                    2'd3: vld_bank3[wr_tid_A][wr_idx_A] <= 1'b1;
+                    2'd0: vld_bank0[wr_tid_A][$clog2(BANK_SLOTS[0])'(wr_idx_A)] <= 1'b1;
+                    2'd1: vld_bank1[wr_tid_A][$clog2(BANK_SLOTS[1])'(wr_idx_A)] <= 1'b1;
+                    2'd2: vld_bank2[wr_tid_A][$clog2(BANK_SLOTS[2])'(wr_idx_A)] <= 1'b1;
+                    2'd3: vld_bank3[wr_tid_A][$clog2(BANK_SLOTS[3])'(wr_idx_A)] <= 1'b1;
                 endcase
             end
 
             if (wr_en_B) begin
                 unique case (wr_bank_B)
-                    2'd0: vld_bank0[wr_tid_B][wr_idx_B] <= 1'b1;
-                    2'd1: vld_bank1[wr_tid_B][wr_idx_B] <= 1'b1;
-                    2'd2: vld_bank2[wr_tid_B][wr_idx_B] <= 1'b1;
-                    2'd3: vld_bank3[wr_tid_B][wr_idx_B] <= 1'b1;
+                    2'd0: vld_bank0[wr_tid_B][$clog2(BANK_SLOTS[0])'(wr_idx_B)] <= 1'b1;
+                    2'd1: vld_bank1[wr_tid_B][$clog2(BANK_SLOTS[1])'(wr_idx_B)] <= 1'b1;
+                    2'd2: vld_bank2[wr_tid_B][$clog2(BANK_SLOTS[2])'(wr_idx_B)] <= 1'b1;
+                    2'd3: vld_bank3[wr_tid_B][$clog2(BANK_SLOTS[3])'(wr_idx_B)] <= 1'b1;
                 endcase
             end
         end
@@ -121,20 +126,20 @@ module regfile #(
         // Read Port A
         if (rd_en_A) begin
             unique case (rd_bank_A)
-                2'd0: rd_data_A <= mem_bank0[(rd_tid_A*BANK_SLOTS[0])+rd_idx_A];
-                2'd1: rd_data_A <= mem_bank1[(rd_tid_A*BANK_SLOTS[1])+rd_idx_A];
-                2'd2: rd_data_A <= mem_bank2[(rd_tid_A*BANK_SLOTS[2])+rd_idx_A];
-                2'd3: rd_data_A <= mem_bank3[(rd_tid_A*BANK_SLOTS[3])+rd_idx_A];
+                2'd0: rd_data_A <= mem_bank0[ADDR_W0'(rd_tid_A*BANK_SLOTS[0])+ADDR_W0'(rd_idx_A)];
+                2'd1: rd_data_A <= mem_bank1[ADDR_W1'(rd_tid_A*BANK_SLOTS[1])+ADDR_W1'(rd_idx_A)];
+                2'd2: rd_data_A <= mem_bank2[ADDR_W2'(rd_tid_A*BANK_SLOTS[2])+ADDR_W2'(rd_idx_A)];
+                2'd3: rd_data_A <= mem_bank3[ADDR_W3'(rd_tid_A*BANK_SLOTS[3])+ADDR_W3'(rd_idx_A)];
             endcase
         end
 
         // Read Port B
         if (rd_en_B) begin
             unique case (rd_bank_B)
-                2'd0: rd_data_B <= mem_bank0[(rd_tid_B*BANK_SLOTS[0])+rd_idx_B];
-                2'd1: rd_data_B <= mem_bank1[(rd_tid_B*BANK_SLOTS[1])+rd_idx_B];
-                2'd2: rd_data_B <= mem_bank2[(rd_tid_B*BANK_SLOTS[2])+rd_idx_B];
-                2'd3: rd_data_B <= mem_bank3[(rd_tid_B*BANK_SLOTS[3])+rd_idx_B];
+                2'd0: rd_data_B <= mem_bank0[ADDR_W0'(rd_tid_B*BANK_SLOTS[0])+ADDR_W0'(rd_idx_B)];
+                2'd1: rd_data_B <= mem_bank1[ADDR_W1'(rd_tid_B*BANK_SLOTS[1])+ADDR_W1'(rd_idx_B)];
+                2'd2: rd_data_B <= mem_bank2[ADDR_W2'(rd_tid_B*BANK_SLOTS[2])+ADDR_W2'(rd_idx_B)];
+                2'd3: rd_data_B <= mem_bank3[ADDR_W3'(rd_tid_B*BANK_SLOTS[3])+ADDR_W3'(rd_idx_B)];
             endcase
         end
     end
@@ -143,18 +148,18 @@ module regfile #(
     always_comb begin
         rd_vld_A = 1'b0;
         unique case (rd_vld_bank_A)
-            2'd0: rd_vld_A = vld_bank0[rd_vld_tid_A][rd_vld_idx_A];
-            2'd1: rd_vld_A = vld_bank1[rd_vld_tid_A][rd_vld_idx_A];
-            2'd2: rd_vld_A = vld_bank2[rd_vld_tid_A][rd_vld_idx_A];
-            2'd3: rd_vld_A = vld_bank3[rd_vld_tid_A][rd_vld_idx_A];
+            2'd0: rd_vld_A = vld_bank0[rd_vld_tid_A][$clog2(BANK_SLOTS[0])'(rd_vld_idx_A)];
+            2'd1: rd_vld_A = vld_bank1[rd_vld_tid_A][$clog2(BANK_SLOTS[1])'(rd_vld_idx_A)];
+            2'd2: rd_vld_A = vld_bank2[rd_vld_tid_A][$clog2(BANK_SLOTS[2])'(rd_vld_idx_A)];
+            2'd3: rd_vld_A = vld_bank3[rd_vld_tid_A][$clog2(BANK_SLOTS[3])'(rd_vld_idx_A)];
         endcase
 
         rd_vld_B = 1'b0;
         unique case (rd_vld_bank_B)
-            2'd0: rd_vld_B = vld_bank0[rd_vld_tid_B][rd_vld_idx_B];
-            2'd1: rd_vld_B = vld_bank1[rd_vld_tid_B][rd_vld_idx_B];
-            2'd2: rd_vld_B = vld_bank2[rd_vld_tid_B][rd_vld_idx_B];
-            2'd3: rd_vld_B = vld_bank3[rd_vld_tid_B][rd_vld_idx_B];
+            2'd0: rd_vld_B = vld_bank0[rd_vld_tid_B][$clog2(BANK_SLOTS[0])'(rd_vld_idx_B)];
+            2'd1: rd_vld_B = vld_bank1[rd_vld_tid_B][$clog2(BANK_SLOTS[1])'(rd_vld_idx_B)];
+            2'd2: rd_vld_B = vld_bank2[rd_vld_tid_B][$clog2(BANK_SLOTS[2])'(rd_vld_idx_B)];
+            2'd3: rd_vld_B = vld_bank3[rd_vld_tid_B][$clog2(BANK_SLOTS[3])'(rd_vld_idx_B)];
         endcase
     end
 

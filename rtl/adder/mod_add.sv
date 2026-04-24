@@ -14,12 +14,16 @@ module mod_add #(
     output logic [CHUNKS-1:0][W-1:0] res
 );
 
+    logic [(CHUNKS*W)-1:0] MOD2;
+    assign MOD2 = {MODULUS[(CHUNKS*W)-2:0], 1'b0};
+
     logic [CHUNKS:0] op_delay;
 
     always_ff @(posedge clk) begin
         if (rst) begin
             op_delay <= '{default: '0};
-        end else begin
+        end
+        else begin
             op_delay <= {op_delay[CHUNKS-1:0], op};
         end
     end
@@ -53,7 +57,8 @@ module mod_add #(
                         res1_shiftReg[j] <= '0;
                     end
 
-                end else begin
+                end
+                else begin
                     a_shiftReg_in[0] <= a[i];
                     b_shiftReg_in[0] <= b[i];
 
@@ -97,13 +102,14 @@ module mod_add #(
                     res0[i] = tmp_res0[W-1:0];
 
                     tmp_res1 = (i == 0)
-                        ? tmp_res0[W-1:0] - MODULUS[W-1:0]
-                        : tmp_res0[W-1:0] - MODULUS[i*W+:W] - (W+1)'(cn[i-1]);
+                        ? tmp_res0[W-1:0] - MOD2[W-1:0]
+                        : tmp_res0[W-1:0] - MOD2[i*W+:W] - (W+1)'(cn[i-1]);
 
                     cn_out = tmp_res1[W];
                     res1[i] = tmp_res1[W-1:0];
 
-                end else begin : g_subtraction
+                end
+                else begin : g_subtraction
                     tmp_res0 = (i == 0)
                         ? a_shifted_in[i] - b_shifted_in[i]
                         : a_shifted_in[i] - b_shifted_in[i] - (W+1)'(c0[i-1]);
@@ -112,8 +118,8 @@ module mod_add #(
                     res0[i] = tmp_res0[W-1:0];
 
                     tmp_res1 = (i == 0)
-                        ? tmp_res0[W-1:0] + MODULUS[W-1:0]
-                        : tmp_res0[W-1:0] + MODULUS[i*W+:W] + (W+1)'(cn[i-1]);
+                        ? tmp_res0[W-1:0] + MOD2[W-1:0]
+                        : tmp_res0[W-1:0] + MOD2[i*W+:W] + (W+1)'(cn[i-1]);
 
                     cn_out = tmp_res1[W];
                     res1[i] = tmp_res1[W-1:0];
@@ -124,7 +130,8 @@ module mod_add #(
                 if (rst) begin
                     c0[i] <= '0;
                     cn[i] <= '0;
-                end else begin
+                end
+                else begin
                     c0[i] <= c0_out;
                     cn[i] <= cn_out;
                 end
@@ -136,7 +143,8 @@ module mod_add #(
         for (int k = 0; k < CHUNKS; k++) begin
             if (!op_delay[CHUNKS]) begin
                 res[k] = (cn[CHUNKS-1] & ~c0[CHUNKS-1]) ? res0_shifted[k] : res1_shifted[k];
-            end else begin
+            end
+            else begin
                 res[k] = (~c0[CHUNKS-1]) ? res0_shifted[k] : res1_shifted[k];
             end
         end

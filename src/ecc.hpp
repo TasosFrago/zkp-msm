@@ -76,6 +76,40 @@ struct AffinePoint {
 };
 
 template <size_t Bits>
+struct XYZZPoint {
+	using FieldT = bga::BigInt<Bits>;
+	static constexpr size_t bits = Bits;
+
+	FieldT X, Y, ZZ, ZZZ;
+
+	XYZZPoint() : X(0), Y(1), ZZ(0), ZZZ(0) {};
+	XYZZPoint(FieldT x, FieldT y, FieldT zz, FieldT zzz)
+	    : X(std::move(x)), Y(std::move(y)), ZZ(std::move(zz)), ZZZ(std::move(zzz)) {};
+
+	template <mda::MONT_ALGO mont_algo = mda::MONT_ALGO::FIOS>
+	XYZZPoint<Bits> mont(const mda::Montgomery<Bits, mont_algo> &mont) const
+	{
+		return XYZZPoint<Bits>{
+			std::move(mont.init(this->X)),
+			std::move(mont.init(this->Y)),
+			std::move(mont.init(this->ZZ)),
+			std::move(mont.init(this->ZZZ))
+		};
+	}
+
+	template <mda::MONT_ALGO mont_algo = mda::MONT_ALGO::FIOS>
+	XYZZPoint<Bits> demont(const mda::Montgomery<Bits, mont_algo> &mont) const
+	{
+		return XYZZPoint<Bits>{
+			std::move(mont.trans_back(this->X)),
+			std::move(mont.trans_back(this->Y)),
+			std::move(mont.trans_back(this->ZZ)),
+			std::move(mont.trans_back(this->ZZZ))
+		};
+	}
+};
+
+template <size_t Bits>
 struct ProjectivePoint {
 	using FieldT = bga::BigInt<Bits>;
 	static constexpr size_t bits = Bits;
@@ -294,6 +328,74 @@ public:
 		    std::move(mont.trans_back(Rm.x)),
 		    std::move(mont.trans_back(Rm.y)),
 		    Rm.is_inf);
+	}
+
+	auto add_m(const XYZZPoint<Bits> &Pm, const AffinePoint<Bits> &Qm) const
+	    -> XYZZPoint<Bits>
+	{
+		if(Qm.is_inf) return Pm;
+		if(Pm.ZZ.is_zero()) {
+			const auto one_m = mont.init(1);
+			return XYZZPoint<Bits>{
+				Qm.x, Qm.y, one_m, one_m
+			};
+		}
+
+		auto U2 = mont.mul(Qm.x, Pm.ZZ);
+		auto S2 = mont.mul(Qm.y, Pm.ZZZ);
+		auto P_val = mda::sub(U2, Pm.X, modulus);
+		auto R_val = mda::sub(S2, Pm.Y, modulus);
+
+		// Check for point collision (P_val == 0)
+		if(P_val.is_zero()) {
+			if(R_val.is_zero()) {
+				// return dbl_m(Pm);
+				std::println("ERROR: Should have implemented dbl for XYZZ");
+				return XYZZPoint<Bits>{};
+			} else {
+				// Points are inverses of each other, return infinity
+				return XYZZPoint<Bits>{};
+			}
+		}
+
+		auto PP = mont.mul(P_val, P_val);
+		auto RR = mont.mul(R_val, R_val);
+		auto PPP = mont.mul(P_val, PP);
+		auto Q_val = mont.mul(Pm.X, PP);
+		auto ZZ3 = mont.mul(Pm.ZZ, PP);
+		auto X3t1 = mda::sub(RR, PPP, modulus);
+		auto Y1P = mont.mul(Pm.Y, PPP);
+		auto ZZZ3 = mont.mul(Pm.ZZZ, PPP);
+		auto Q2 = mda::add(Q_val, Q_val, modulus);
+		auto X3 = mda::sub(X3t1, Q2, modulus);
+		auto QsX3 = mda::sub(Q_val, X3, modulus);
+		auto RT = mont.mul(R_val, QsX3);
+		auto Y3 = mda::sub(RT, Y1P, modulus);
+
+		return XYZZPoint<Bits>{
+			std::move(X3),
+			std::move(Y3),
+			std::move(ZZ3),
+			std::move(ZZZ3)
+		};
+	}
+
+	auto add(const XYZZPoint<Bits> &P, const AffinePoint<Bits> &Q) const
+	    -> XYZZPoint<Bits>
+	{
+		if(Q.is_inf) return P;
+		if(P.ZZ.is_zero()) {
+			return XYZZPoint<Bits>{
+				Q.x, Q.y, FieldT(1), FieldT(1)
+			};
+		}
+
+		auto Pm = P.mont(mont);
+		auto Qm = Q.mont(mont);
+
+		auto Rm = add_m(Pm, Qm);
+
+		return Rm.demont(mont);
 	}
 
 	auto add_m(const ProjectivePoint<Bits> &Pm, const ProjectivePoint<Bits> &Qm) const
