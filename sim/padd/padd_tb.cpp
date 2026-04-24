@@ -5,6 +5,10 @@
 #include <queue>
 #include <random>
 
+#include <map>
+#include <string>
+#include <tuple>
+
 #include <verilated.h>
 #include <verilated_fst_c.h>
 
@@ -40,11 +44,11 @@ int main(int argc, char **argv)
 	std::println("MOD: {}", MOD);
 	std::println("THREADS: {}", THREADS);
 
+	constexpr int NUM_TESTS = 80;
+
 	std::mt19937 rng(42);
 	auto gen = genRandBgN(77, rng);
 
-	// Instantiate the curve for the software reference
-	// Curve 'a' and 'b' parameters do not affect the XYZZ + Affine addition formula
 	bga::bgint<W> zero("0");
 	ecc::ShortWeierstrassCurve<W> curve(zero, zero, MOD);
 
@@ -70,6 +74,7 @@ int main(int argc, char **argv)
 	dut->trace(tfp.get(), 99);
 	tfp->open("dump.fst");
 
+	int cycle = 0;
 	auto tick = [&]() {
 		dut->clk = 1;
 		dut->eval();
@@ -80,7 +85,31 @@ int main(int argc, char **argv)
 		dut->eval();
 		tfp->dump(ctx->time());
 		ctx->timeInc(5000);
+		cycle++;
 	};
+
+	std::unique_ptr<FILE, decltype(&std::fclose)> csv_guard(nullptr, &std::fclose);
+	FILE *csv_f = std::fopen("schedule.csv", "w");
+	if(csv_f) {
+		csv_guard.reset(csv_f);
+		std::println(csv_guard.get(), "start_cycle,duration,op_type,produces,threadID");
+	}
+
+	struct OpType {
+		const char *name;
+		char type;
+	};
+	const OpType OP_SEQ[] = {
+		{ "U2", 'M' }, { "S2", 'M' }, { "P", 'A' }, { "R", 'A' }, { "PP", 'M' }, { "R2", 'M' }, { "PPP", 'M' }, { "Q", 'M' }, { "ZZ3", 'M' }, { "X3_sub1", 'A' }, { "Y1P", 'M' }, { "ZZZ3", 'M' }, { "2Q", 'A' }, { "X3", 'A' }, { "QsubX3", 'A' }, { "RT", 'M' }, { "Y3", 'A' }
+	};
+	struct InFlightOp {
+		int start_c;
+		std::string name;
+		char type;
+	};
+
+	std::map<std::tuple<int, int, int>, InFlightOp> inflight_ops;
+	int thread_op_idx[Vpadd_padd::THREAD_CNT] = { 0 };
 
 	// Reset Sequence
 	tick();
@@ -91,7 +120,6 @@ int main(int argc, char **argv)
 	dut->rst = 0;
 	tick();
 
-	const int NUM_TESTS = 1000;
 	std::queue<std::pair<TestCase, ecc::XYZZPoint<W>>> expected_queue;
 
 	int test_count = 0;
@@ -113,28 +141,67 @@ int main(int argc, char **argv)
 		file_guard.reset(f);
 	}
 
-	std::unique_ptr<FILE, decltype(&std::fclose)> errorf(nullptr, &std::fclose);
-	FILE *f1 = std::fopen("errors.log", "w");
-	if(f1) {
-		errorf.reset(f1);
-	}
-
-	// Main Test Loop
-	// Run until we've fed all tests AND the expected queue is completely empty (pipeline flushed)
 	int timeout = 0;
-	int cycle = 0;
 	while(test_count < NUM_TESTS || !expected_queue.empty()) {
-		// Evaluate comb logic to ensure dut->rdy_in is accurate for this cycle
 		dut->eval();
 
-		// --------------------------------------------------
-		//  1. Input Stimulus State Machine (Feeding)
-		// --------------------------------------------------
+		if(dut->padd->tb_vld_issue) {
+			int tid = dut->padd->tb_issue_tid;
+			int bank = dut->padd->tb_issue_bank;
+			int idx = dut->padd->tb_issue_idx;
+			int op_idx = thread_op_idx[tid];
+
+			if(op_idx < 17) {
+				const auto &op = OP_SEQ[op_idx];
+				inflight_ops[{ tid, bank, idx }] = { cycle, op.name, op.type };
+			}
+			thread_op_idx[tid]++;
+			if(thread_op_idx[tid] >= 17) thread_op_idx[tid] = 0;
+		}
+		if(dut->padd->tb_add_wb_vld && csv_guard) {
+			auto key = std::make_tuple((int)dut->padd->tb_add_wb_tid,
+						   (int)dut->padd->tb_add_wb_bank,
+						   (int)dut->padd->tb_add_wb_idx);
+
+			if(inflight_ops.contains(key)) {
+				auto op = inflight_ops[key];
+				int duration = cycle - op.start_c;
+				std::println(csv_guard.get(), "{},{},A,{},{}", op.start_c, duration, op.name, dut->padd->tb_add_wb_tid);
+				inflight_ops.erase(key);
+			}
+		}
+		if(dut->padd->tb_mul_wb_vld && csv_guard) {
+			auto key = std::make_tuple((int)dut->padd->tb_mul_wb_tid,
+						   (int)dut->padd->tb_mul_wb_bank,
+						   (int)dut->padd->tb_mul_wb_idx);
+
+			if(inflight_ops.contains(key)) {
+				auto op = inflight_ops[key];
+				int duration = cycle - op.start_c;
+				std::println(csv_guard.get(), "{},{},M,{},{}", op.start_c, duration, op.name, dut->padd->tb_mul_wb_tid);
+				inflight_ops.erase(key);
+			}
+		}
+		if(dut->padd->tb_load_en && csv_guard) {
+			int tid = dut->padd->tb_load_tid;
+			int side = dut->padd->tb_load_side;
+			int step = dut->padd->tb_load_step;
+
+			const char *produces = "";
+			if(step == 0)
+				produces = (side == 0) ? "0: X1-X2" : "1: X1-X2";
+			else if(step == 1)
+				produces = (side == 0) ? "0: Y2-Y1" : "1: Y2-Y1";
+			else if(step == 2)
+				produces = (side == 0) ? "0: ZZ1-ZZZ1" : "1: ZZ1-ZZZ1";
+
+			std::println(csv_guard.get(), "{},1,L,{},{}", cycle, produces, tid);
+		}
+
 		if(test_count < NUM_TESTS && dut->rdy_in) {
 			dut->vld_in = 1;
 
 			if(feed_step == 0) {
-				// Generate random inputs bounded by modulus
 				current_test.p_x = curve.mont.init(bga::bgint<W>(gen()));
 				if(current_test.p_x >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				current_test.p_y = curve.mont.init(bga::bgint<W>(gen()));
@@ -148,7 +215,6 @@ int main(int argc, char **argv)
 				current_test.q_y = curve.mont.init(bga::bgint<W>(gen()));
 				if(current_test.q_y >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 
-				// Generate Software Expected Result
 				ecc::XYZZPoint<W> Pm(current_test.p_x, current_test.p_y, current_test.p_zz, current_test.p_zzz);
 				ecc::AffinePoint<W> Qm(current_test.q_x, current_test.q_y, false);
 
@@ -231,21 +297,6 @@ int main(int argc, char **argv)
 						fail_count++;
 						int off_by_ones = 0;
 
-						// FILE LOG
-						std::println(errorf.get(), "\n--- Log at cycle {} (Time: {} ns)", cycle, (ctx->time() / 1000));
-						std::println(errorf.get(), "\tProd from X1: {0:x} | {0}", producer.p_x);
-						std::println(errorf.get(), "\tProd from Y1: {0:x} | {0}", producer.p_y);
-						std::println(errorf.get(), "\tProd from ZZ1: {0:x} | {0}", producer.p_zz);
-						std::println(errorf.get(), "\tProd from ZZZ1: {0:x} | {0}", producer.p_zzz);
-						std::println(errorf.get(), "\tProd from X2: {0:x} | {0}", producer.q_x);
-						std::println(errorf.get(), "\tProd from Y2: {0:x} | {0}", producer.q_y);
-						std::println(errorf.get(), "");
-
-						std::println(errorf.get(), "\tOut X: {0:x} | {0}", hw_result.X);
-						std::println(errorf.get(), "\tOut Y: {0:x} | {0}", hw_result.Y);
-						std::println(errorf.get(), "\tOut ZZ: {0:x} | {0}", hw_result.ZZ);
-						std::println(errorf.get(), "\tOut ZZZ: {0:x} | {0}", hw_result.ZZZ);
-
 						auto print_error = [&](const char *type, bga::bgint<W> exp, bga::bgint<W> hw_res,
 								       bga::bgint<W> exp_b, bga::bgint<W> hw_res_b) {
 							std::println("\tProd from X1: {0:x} | {0}", producer.p_x);
@@ -300,7 +351,6 @@ int main(int argc, char **argv)
 				break;
 			}
 		}
-		cycle++;
 	}
 
 	auto missed = NUM_TESTS - (pass_count_back + fail_count);

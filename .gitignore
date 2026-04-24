@@ -6,6 +6,8 @@ compile_commands.json
 docs/
 *.log
 *.data
+*.csv
+*.svg
 
 *.fst
 *.fst.hier

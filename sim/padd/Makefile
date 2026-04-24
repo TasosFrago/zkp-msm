@@ -47,7 +47,7 @@ endif
 
 
 PARAM_NUMBER_SIZE := 256
-PARAM_W := 64
+PARAM_W := 32
 PARAM_CHUNKS := $(shell echo $$(( $(PARAM_NUMBER_SIZE) / $(PARAM_W) )))
 # PARAM_MODULUS := 73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
 PARAM_MODULUS := 30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
@@ -58,6 +58,7 @@ V_CXXFLAGS += -DHW_MODULUS='"$(PARAM_MODULUS)"'
 
 V_FLAGS := --cc --exe --build -j $(shell nproc)
 V_FLAGS += --trace-fst --trace-structs
+V_FLAGS += -DENABLE_GANT_PLOT
 V_FLAGS += --Mdir $(abspath $(BUILD_DIR))
 V_FLAGS += --top-module $(TOP_MOD)
 V_FLAGS += -CFLAGS "$(V_CXXFLAGS)" -LDFLAGS "$(V_LDFLAGS)"

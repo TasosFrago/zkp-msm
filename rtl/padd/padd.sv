@@ -113,7 +113,7 @@ module padd #(
             if (control_path_active && sched_map[active_tid]) begin
                 if (pc[active_tid] == 5'(NUM_OPS)) begin
                     init_flush_side <= active_side[active_tid];
-                    active_side[active_tid] <= !active_side[active_tid];
+                    active_side[active_tid] <= ~active_side[active_tid];
 
                     init_flush <= 1'b1;
                     init_flush_tid <= active_tid;
@@ -491,5 +491,9 @@ module padd #(
             end
         end
     end
+
+`ifdef ENABLE_GANT_PLOT
+    `include "padd_tb_plot_probes.sv"
+`endif
 
 endmodule : padd
