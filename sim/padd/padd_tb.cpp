@@ -44,7 +44,10 @@ int main(int argc, char **argv)
 	std::println("MOD: {}", MOD);
 	std::println("THREADS: {}", THREADS);
 
-	constexpr int NUM_TESTS = 80;
+	constexpr int BATCHES = 3;
+	std::println("BATCHES: {}", BATCHES);
+	constexpr int NUM_TESTS = BATCHES * THREADS;
+	// constexpr int NUM_TESTS = 27 + 5;
 
 	std::mt19937 rng(42);
 	auto gen = genRandBgN(77, rng);
@@ -142,6 +145,7 @@ int main(int argc, char **argv)
 	}
 
 	int timeout = 0;
+	int print_timer = 0;
 	while(test_count < NUM_TESTS || !expected_queue.empty()) {
 		dut->eval();
 
@@ -351,6 +355,13 @@ int main(int argc, char **argv)
 				break;
 			}
 		}
+
+		if(print_timer >= 10000) {
+			print_timer = 0;
+			std::print("Now @ cycle {} (time: {} ns), currently passed: {}, failed: {}\r", cycle, ctx->time() / 1000, pass_count_back, fail_count);
+		}
+
+		print_timer++;
 	}
 
 	auto missed = NUM_TESTS - (pass_count_back + fail_count);

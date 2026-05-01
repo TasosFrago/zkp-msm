@@ -18,7 +18,7 @@ module padd #(
     localparam int CHUNKS = (NUMBER_SIZE / W);
     localparam int MUL_LAT = 3 * CHUNKS;
     localparam int ADD_LAT = CHUNKS + 1;
-    localparam int THREAD_CNT  /* verilator public */ = 20;
+    localparam int THREAD_CNT  /* verilator public */ = 27;
     localparam int LOAD_STEPS = 3;
 
     import instr_pkg::*;
@@ -121,7 +121,12 @@ module padd #(
                     reg_flush <= 1'b1;
                     reg_flush_tid <= active_tid;
 
-                    s1_reg.valid <= 1'b0;
+                    // s1_reg.valid <= 1'b0;
+                    s1_reg.valid <= 1'b1;
+                    s1_reg.tid <= active_tid;
+                    s1_reg.pc <= pc[active_tid];
+                    s1_reg.instr <= instr_rom[0];
+                    s1_reg.finished <= 1'b0;
                 end
                 else begin
                     s1_reg.valid <= 1'b1;

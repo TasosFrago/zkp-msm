@@ -50,6 +50,17 @@ int main(int argc, char **argv)
 
 	std::println("n_prime {}", mont.n_p);
 
+	// bga::bgint<W> testA("2");
+	// bga::bgint<W> testB("3");
+	// bga::bgint<W> testC("2");
+	//
+	// auto testAm = mont.init(testA);
+	// auto testBm = mont.init(testB);
+	// auto testCm = mont.init(testC);
+	//
+	// auto res = mont.mul_fios_test(testAm, testBm, testCm);
+	// std::println("Test Res: {}", mont.trans_back(res));
+
 	// auto A_m = mont.init(A);
 	// auto B_m = mont.init(B);
 

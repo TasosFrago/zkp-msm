@@ -94,13 +94,14 @@ module regfile #(
             vld_bank2 <= '{default: '0};
             vld_bank3 <= '{default: '0};
         end
-        else if (flush_vld) begin
-            if (flush_bank_mask[0]) vld_bank0[flush_tid] <= '0;
-            if (flush_bank_mask[1]) vld_bank1[flush_tid] <= '0;
-            if (flush_bank_mask[2]) vld_bank2[flush_tid] <= '0;
-            if (flush_bank_mask[3]) vld_bank3[flush_tid] <= '0;
-        end
         else begin
+            if (flush_vld) begin
+                if (flush_bank_mask[0]) vld_bank0[flush_tid] <= '0;
+                if (flush_bank_mask[1]) vld_bank1[flush_tid] <= '0;
+                if (flush_bank_mask[2]) vld_bank2[flush_tid] <= '0;
+                if (flush_bank_mask[3]) vld_bank3[flush_tid] <= '0;
+            end
+
             if (wr_en_A) begin
                 unique case (wr_bank_A)
                     2'd0: vld_bank0[wr_tid_A][$clog2(BANK_SLOTS[0])'(wr_idx_A)] <= 1'b1;

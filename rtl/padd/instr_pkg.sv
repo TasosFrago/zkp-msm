@@ -85,4 +85,26 @@ package instr_pkg;
         '{OP_SUB, RT, Y1P, Y3}  // Y3   = RT - Y1P
     };
 
+
+    // #########################
+    // #   PADD INSTRUCTIONS   #
+    // #########################
+    // U2  = X2 * ZZ1      | 1
+    // S2  = Y2 * ZZZ1     | 1
+    // P   = U2 - X1       | 2
+    // R   = S2 - Y1       | 2
+    // PP  = P  * P        | 3
+    // RR  = R  * R        | 1
+    // PPP = P  * PP       | 3
+    // Q = X1 * PP         | 2
+    // ZZ3 = ZZ1 * PP      | 0
+    // X3t1 = RR - PPP     | 1
+    // Y1P = Y1 * PPP      | 1
+    // ZZZ3 = ZZZ1 * PPP   | 1
+    // Q2 = Q + Q          | 1
+    // X3 = X3t1 - Q2      | 1
+    // QsX3 = Q - X3       | 1
+    // RT = R * QsX3       | 1
+    // Y3 = RT - Y1P       | 0
+
 endpackage : instr_pkg

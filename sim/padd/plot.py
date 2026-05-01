@@ -35,10 +35,17 @@ parser.add_argument(
     default=3,
     help="Number of async load cycles (default: 3)"
 )
+parser.add_argument(
+    "-nl",
+    type=bool,
+    default=False,
+    help="Don't plot loads"
+)
 
 args = parser.parse_args()
 MAX_THREADS = args.max_threads
 ASYNC_LOAD_CYCLES = args.async_load_cycles
+SKIP_LOAD = args.nl
 
 print(f"MAX_THREADS: {MAX_THREADS}")
 
@@ -78,11 +85,17 @@ colors = [base(i) if i < 20 else cmap_extra((i-20) % 3) for i in range(MAX_THREA
 
 y_ticks, y_labels = [], []
 
+correction = 0
 for i, task in enumerate(sorted_tasks):
     color = colors[task.threadID]
+
+    if SKIP_LOAD and task.op_type == 'L':
+        correction += 1
+        continue
+
     hatch = '///' if task.op_type == 'A' else '\\\\' if task.op_type == 'L' else ''
 
-    ax.barh(i, task.duration,
+    ax.barh((i - correction), task.duration,
             left=task.start, color=color, edgecolor='black',
             hatch=hatch, height=1.0, linewidth=0.5)
 
@@ -92,7 +105,7 @@ for i, task in enumerate(sorted_tasks):
     position = (task.start + task.duration // 2) if task.duration > 3 else (task.start + 1)
     ha = 'center' if task.duration > 3 else 'left'
 
-    ax.text(position, i, display_name, ha=ha, va='center', 
+    ax.text(position, (i - correction), display_name, ha=ha, va='center', 
             color=text_color, fontweight='bold', fontsize=7)
 
     y_ticks.append(i)
