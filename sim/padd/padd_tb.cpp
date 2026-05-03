@@ -57,9 +57,11 @@ int main(int argc, char **argv)
 
 	auto mod_val = curve.mont.n;
 
-	Verilated::commandArgs(argc, argv);
+	// Verilated::commandArgs(argc, argv);
 
 	auto ctx = std::make_shared<VerilatedContext>();
+
+	ctx->commandArgs(argc, argv);
 	ctx->traceEverOn(true);
 
 	ctx->timeunit(-9);
@@ -225,17 +227,17 @@ int main(int argc, char **argv)
 				auto expected = curve.add_m(Pm, Qm);
 				expected_queue.push({ current_test, expected });
 
-				// Step 0 (Idx 0): Bank 0 = X1 (P.X), Bank 1 = X2 (Q.X)
-				vtb::to_vlwide(current_test.p_x, dut->bus0_in);
-				vtb::to_vlwide(current_test.q_x, dut->bus1_in);
+				// Step 0: Idx 0 (Even) & Idx 1 (Odd)
+				vtb::to_vlwide(current_test.p_x, dut->bus0_in); // X1 -> Idx 0
+				vtb::to_vlwide(current_test.p_y, dut->bus1_in); // Y1 -> Idx 1
 			} else if(feed_step == 1) {
-				// Step 1 (Idx 1): Bank 0 = Y2 (Q.Y), Bank 1 = Y1 (P.Y)
-				vtb::to_vlwide(current_test.q_y, dut->bus0_in);
-				vtb::to_vlwide(current_test.p_y, dut->bus1_in);
+				// Step 1: Idx 2 (Even) & Idx 3 (Odd)
+				vtb::to_vlwide(current_test.p_zz, dut->bus0_in);  // ZZ1  -> Idx 2
+				vtb::to_vlwide(current_test.p_zzz, dut->bus1_in); // ZZZ1 -> Idx 3
 			} else if(feed_step == 2) {
-				// Step 2 (Idx 2): Bank 0 = ZZ1 (P.ZZ), Bank 1 = ZZZ1 (P.ZZZ)
-				vtb::to_vlwide(current_test.p_zz, dut->bus0_in);
-				vtb::to_vlwide(current_test.p_zzz, dut->bus1_in);
+				// Step 2: Idx 4 (Even) & Idx 5 (Odd)
+				vtb::to_vlwide(current_test.q_x, dut->bus0_in); // X2 -> Idx 4
+				vtb::to_vlwide(current_test.q_y, dut->bus1_in); // Y2 -> Idx 5
 			}
 
 			feed_step++;
@@ -358,7 +360,7 @@ int main(int argc, char **argv)
 
 		if(print_timer >= 10000) {
 			print_timer = 0;
-			std::print("Now @ cycle {} (time: {} ns), currently passed: {}, failed: {}\r", cycle, ctx->time() / 1000, pass_count_back, fail_count);
+			std::print("Now @ cycle {} (time: {} ns), currently passed: {}, failed: {}, timeout: {}\r", cycle, ctx->time() / 1000, pass_count_back, fail_count, timeout);
 		}
 
 		print_timer++;

@@ -23,8 +23,31 @@ module padd #(
 
     import instr_pkg::*;
 
+    instr_t instr_rom  [NUM_OPS];
+    string  instr_file;
+
+    initial begin
+        if ($value$plusargs("MEM_FILE=%s", instr_file)) begin
+            $readmemh({instr_file, "padd_instructions.mem"}, instr_rom);
+            $display("Loaded instructions from %s", {instr_file, "padd_instructions.mem"});
+        end
+        else begin
+            $readmemh("padd_instructions.mem", instr_rom);
+        end
+
+        // Debug: Print loaded instructions
+        // $display("\n================ INSTR ROM DUMP ================");
+        // for (int i = 0; i < NUM_OPS; i++) begin
+        //     $display("instr: %h", instr_rom[i]);
+        //     $display(
+        //         "PC [%0d]: OP=%0d | Dest(wb:%0b, val_type:%0d, bank:%0d, idx:%0d) | SrcA(init:%0b, bank:%0d, idx:%0d)",
+        //         i, instr_rom[i].op, instr_rom[i].dest.wb_en, instr_rom[i].dest.val_type,
+        //         instr_rom[i].dest.bank, instr_rom[i].dest.idx, instr_rom[i].src_a.is_init,
+        //         instr_rom[i].src_a.bank, instr_rom[i].src_a.idx);
+        // end
+    end
+
     localparam type alu_tag_t = alu_metadata#(.TID_BITS($clog2(THREAD_CNT)))::tag_t;
-    localparam type alu_dest_t = alu_metadata#(.TID_BITS($clog2(THREAD_CNT)))::dest_t;
 
     logic [$clog2(THREAD_CNT)-1:0] active_tid;
     logic [THREAD_CNT-1:0] active_threads_map;
@@ -169,8 +192,8 @@ module padd #(
     logic srcA_rdy, srcB_rdy;
 
     logic [1:0] s1_init_bank_a, s1_init_bank_b;
-    assign s1_init_bank_a = s1_reg.instr.src_a.bank + (active_side[s1_reg.tid] ? 2'd2 : 2'd0);
-    assign s1_init_bank_b = s1_reg.instr.src_b.bank + (active_side[s1_reg.tid] ? 2'd2 : 2'd0);
+    assign s1_init_bank_a = {1'b0, active_side[s1_reg.tid]};
+    assign s1_init_bank_b = {1'b0, active_side[s1_reg.tid]};
 
     assign srcA_rdy = s1_reg.instr.src_a.is_init ? init_vld_a : reg_vld_a;
     assign srcB_rdy = s1_reg.instr.src_b.is_init ? init_vld_b : reg_vld_b;
@@ -270,14 +293,14 @@ module padd #(
         end
     end
 
-    localparam int INIT_MAX_DEPTH = 3;
+    localparam int INIT_MAX_DEPTH = 6;
     localparam int INIT_MAX_DEPTH_W = $clog2(INIT_MAX_DEPTH);
 
     regfile #(
         .NUMBER_SIZE(NUMBER_SIZE),
         .W(W),
         .MAX_THREADS(THREAD_CNT),
-        .BANK_SLOTS('{3, 3, 3, 3}),
+        .BANK_SLOTS('{6, 6, 2, 2}),
         .MAX_DEPTH(INIT_MAX_DEPTH)
     ) init_vals_regfile (
         .clk(clk),
@@ -286,28 +309,28 @@ module padd #(
         // Write Port A
         .wr_data_A(bus0_in),
         .wr_en_A  (vld_in & rdy_in),
-        .wr_bank_A({load_side, 1'b0}),
+        .wr_bank_A({1'b0, load_side}),
         .wr_tid_A (load_tid),
-        .wr_idx_A (load_step),
+        .wr_idx_A ({load_step[1:0], 1'b0}),
 
         // Write Port B
         .wr_data_B(bus1_in),
         .wr_en_B  (vld_in & rdy_in),
-        .wr_bank_B({load_side, 1'b1}),
+        .wr_bank_B({1'b0, load_side}),
         .wr_tid_B (load_tid),
-        .wr_idx_B (load_step),
+        .wr_idx_B ({load_step[1:0], 1'b1}),
 
         // Read Port A
         .rd_data_A(init_data_A),
         .rd_en_A  (s2_reg.valid & s2_reg.instr.src_a.is_init),
-        .rd_bank_A(s2_reg.instr.src_a.bank + (active_side[s2_reg.tid] ? 2'd2 : 2'd0)),
+        .rd_bank_A({1'b0, active_side[s2_reg.tid]}),
         .rd_tid_A (s2_reg.tid),
         .rd_idx_A (INIT_MAX_DEPTH_W'(s2_reg.instr.src_a.idx)),
 
         // Read Port B
         .rd_data_B(init_data_B),
         .rd_en_B  (s2_reg.valid & s2_reg.instr.src_b.is_init & ~same_srcs),
-        .rd_bank_B(s2_reg.instr.src_b.bank + (active_side[s2_reg.tid] ? 2'd2 : 2'd0)),
+        .rd_bank_B({1'b0, active_side[s2_reg.tid]}),
         .rd_tid_B (s2_reg.tid),
         .rd_idx_B (INIT_MAX_DEPTH_W'(s2_reg.instr.src_b.idx)),
 
@@ -326,29 +349,29 @@ module padd #(
         // Flush
         .flush_vld(init_flush),
         .flush_tid(init_flush_tid),
-        .flush_bank_mask(init_flush_side ? 4'b1100 : 4'b0011)
+        .flush_bank_mask(init_flush_side ? 4'b0010 : 4'b0001)
     );
 
     regfile #(
         .NUMBER_SIZE(NUMBER_SIZE),
         .W(W),
         .MAX_THREADS(THREAD_CNT),
-        .BANK_SLOTS('{8, 5, 2, 2}),
-        .MAX_DEPTH(8)
+        .BANK_SLOTS('{6, 2, 2, 2}),
+        .MAX_DEPTH(6)
     ) val_regfile (
         .clk(clk),
         .rst(rst),
 
         // Write Port A
         .wr_data_A(add_out),
-        .wr_en_A  (add_tag_out.vld_tag),
+        .wr_en_A  (add_tag_out.vld_tag & add_tag_out.dest.wb_en),
         .wr_bank_A(add_tag_out.dest.bank),
         .wr_tid_A (add_tag_out.tid),
         .wr_idx_A (add_tag_out.dest.idx),
 
         // Write Port B
         .wr_data_B(mul_out),
-        .wr_en_B  (mul_tag_out.vld_tag),
+        .wr_en_B  (mul_tag_out.vld_tag & mul_tag_out.dest.wb_en),
         .wr_bank_B(mul_tag_out.dest.bank),
         .wr_tid_B (mul_tag_out.tid),
         .wr_idx_B (mul_tag_out.dest.idx),
@@ -397,7 +420,7 @@ module padd #(
         // In
         .op  (vld_issue ? s3_reg.instr.op : OP_NOOP),
         .tid (s3_reg.tid),
-        .dest('{bank: s3_reg.instr.dest.bank, idx: s3_reg.instr.dest.idx}),
+        .dest(s3_reg.instr.dest),
         .in_a(alu_inA),
         .in_b(alu_inB),
 
@@ -414,17 +437,10 @@ module padd #(
     logic is_X3_add, is_Y3_add;
     logic is_ZZ3_mul, is_ZZZ3_mul;
 
-    assign is_X3_add = add_tag_out.vld_tag &
-        (add_tag_out.dest.bank == X3.bank) & (add_tag_out.dest.idx == X3.idx);
-
-    assign is_Y3_add = add_tag_out.vld_tag &
-        (add_tag_out.dest.bank == Y3.bank) & (add_tag_out.dest.idx == Y3.idx);
-
-    assign is_ZZ3_mul = mul_tag_out.vld_tag &
-        (mul_tag_out.dest.bank == ZZ3.bank) & (mul_tag_out.dest.idx == ZZ3.idx);
-
-    assign is_ZZZ3_mul = mul_tag_out.vld_tag &
-        (mul_tag_out.dest.bank == ZZZ3.bank) & (mul_tag_out.dest.idx == ZZZ3.idx);
+    assign is_X3_add   = add_tag_out.vld_tag & (add_tag_out.dest.val_type == VAL_X3);
+    assign is_Y3_add   = add_tag_out.vld_tag & (add_tag_out.dest.val_type == VAL_Y3);
+    assign is_ZZ3_mul  = mul_tag_out.vld_tag & (mul_tag_out.dest.val_type == VAL_ZZ3);
+    assign is_ZZZ3_mul = mul_tag_out.vld_tag & (mul_tag_out.dest.val_type == VAL_ZZZ3);
 
     logic [NUMBER_SIZE-1:0] out_buf_X3  [THREAD_CNT];
     logic [NUMBER_SIZE-1:0] out_buf_Y3  [THREAD_CNT];

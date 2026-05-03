@@ -1,14 +1,10 @@
+import instr_pkg::dest_op_t;
 virtual class alu_metadata #(
     parameter int TID_BITS = 5
 );
     typedef struct packed {
-        logic [1:0] bank;
-        logic [2:0] idx;
-    } dest_t;
-
-    typedef struct packed {
         logic [TID_BITS-1:0] tid;
-        dest_t dest;
+        dest_op_t dest;
         logic vld_tag;
     } tag_t;
 endclass : alu_metadata
@@ -16,6 +12,7 @@ endclass : alu_metadata
 module alu
     import instr_pkg::op_t;
     import instr_pkg::OP_ADD, instr_pkg::OP_SUB, instr_pkg::OP_MUL, instr_pkg::OP_NOOP;
+    import instr_pkg::dest_op_t;
 #(
     parameter int NUMBER_SIZE = 256,
     parameter int W = 32,
@@ -24,18 +21,17 @@ module alu
 
     localparam int CHUNKS = (NUMBER_SIZE / W),
     localparam int TID_BITS = $clog2(THREAD_CNT),
-    localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t,
-    localparam type dest_t = alu_metadata#(.TID_BITS(TID_BITS))::dest_t
+    localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t
 ) (
     input logic clk,
     input logic rst,
 
     input op_t op,
 
-    input logic  [TID_BITS-1:0]        tid,   // tid that issues operation
-    input dest_t                       dest,
-    input logic  [  CHUNKS-1:0][W-1:0] in_a,
-    input logic  [  CHUNKS-1:0][W-1:0] in_b,
+    input logic     [TID_BITS-1:0]        tid,   // tid that issues operation
+    input dest_op_t                       dest,
+    input logic     [  CHUNKS-1:0][W-1:0] in_a,
+    input logic     [  CHUNKS-1:0][W-1:0] in_b,
 
     output logic [CHUNKS-1:0][W-1:0] add_out,
     output tag_t add_tag_out,

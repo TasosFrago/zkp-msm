@@ -84,7 +84,7 @@ $(BUILD_DIR)/V$(TOP_MOD): $(HDL_SRCS) $(TB_SRC) $(CXX_HDRS) Makefile
 
 run: sim
 	@echo -e "\033[0;32m[SIM] Running $(TOP_MOD) testbench...\033[0m"
-	@./$(BUILD_DIR)/V$(TOP_MOD)
+	@./$(BUILD_DIR)/V$(TOP_MOD) +MEM_FILE=../../rtl/padd/instructions/
 
 compdb:
 	bear --output compile_commands.json -- $(MAKE) sim --always-make
