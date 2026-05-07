@@ -300,21 +300,6 @@ public:
 	auto dbl(const AffinePoint<Bits> &P) const -> AffinePoint<Bits>
 	{
 		if(P.is_inf) return P;
-		//
-		// auto Px_m = mont.init(P.x);
-		// auto Py_m = mont.init(P.y);
-		//
-		// const auto two_m = mont.init(2);
-		// const auto three_m = mont.init(3);
-		//
-		// auto num = mda::add(
-		//     mont.mul(three_m, mont.mul(Px_m, Px_m)),
-		//     a_m, modulus);
-		//
-		// auto den = mont.inv(mont.mul(two_m, Py_m));
-		// auto lambda_m = mont.mul(num, den);
-		//
-		// auto R_m = solve_affine(Px_m, Py_m, Px_m, lambda_m);
 
 		AffinePoint<Bits> Pm{
 			std::move(mont.init(P.x)),
@@ -328,6 +313,57 @@ public:
 		    std::move(mont.trans_back(Rm.x)),
 		    std::move(mont.trans_back(Rm.y)),
 		    Rm.is_inf);
+	}
+
+	auto add_m(const XYZZPoint<Bits> &Pm, const XYZZPoint<Bits> &Qm) const
+	    -> XYZZPoint<Bits>
+	{
+		if(Pm.ZZ.is_zero()) return Qm;
+		if(Qm.ZZ.is_zero()) return Pm;
+
+		auto U1 = mont.mul(Pm.X, Qm.ZZ);
+		auto U2 = mont.mul(Qm.X, Pm.ZZ);
+
+		auto S1 = mont.mul(Pm.Y, Qm.ZZZ);
+		auto S2 = mont.mul(Qm.Y, Pm.ZZZ);
+		auto P = mda::sub(U2, U1, modulus);
+		auto R = mda::sub(S2, S1, modulus);
+		auto PP = mont.mul(P, P);
+		auto PPP = mont.mul(PP, P);
+		auto Q = mont.mul(U1, PP);
+		auto Q2 = mda::add(Q, Q, modulus);
+		auto R2 = mont.mul(R, R);
+		auto X3s1 = mda::sub(R2, PPP, modulus);
+		auto X3 = mda::sub(X3s1, Q2, modulus);
+		auto QsX3 = mda::sub(Q, X3, modulus);
+		auto RQsX3 = mont.mul(R, QsX3);
+		auto S1sPPP = mont.mul(S1, PPP);
+		auto Y3 = mda::sub(RQsX3, S1sPPP, modulus);
+		auto ZZ = mont.mul(Pm.ZZ, Qm.ZZ);
+		auto ZZ3 = mont.mul(ZZ, PP);
+		auto ZZZ = mont.mul(Pm.ZZZ, Qm.ZZZ);
+		auto ZZZ3 = mont.mul(ZZZ, PPP);
+
+		return XYZZPoint<Bits>{
+			std::move(X3),
+			std::move(Y3),
+			std::move(ZZ3),
+			std::move(ZZZ3)
+		};
+	}
+
+	auto add(const XYZZPoint<Bits> &P, const XYZZPoint<Bits> &Q) const
+	    -> XYZZPoint<Bits>
+	{
+		if(P.ZZ.is_zero()) return Q;
+		if(Q.ZZ.is_zero()) return P;
+
+		auto Pm = P.mont(mont);
+		auto Qm = Q.mont(mont);
+
+		auto Rm = add_m(Pm, Qm);
+
+		return Rm.demont(mont);
 	}
 
 	auto add_m(const XYZZPoint<Bits> &Pm, const AffinePoint<Bits> &Qm) const
@@ -394,6 +430,61 @@ public:
 		auto Qm = Q.mont(mont);
 
 		auto Rm = add_m(Pm, Qm);
+
+		return Rm.demont(mont);
+	}
+
+	auto dbl_m(const XYZZPoint<Bits> &Pm) const
+	    -> XYZZPoint<Bits>
+	{
+		if(Pm.ZZ.is_zero()) {
+			return Pm;
+		}
+		if(Pm.Y.is_zero()) {
+			return XYZZPoint<Bits>{};
+		}
+
+		auto U = mda::add(Pm.Y, Pm.Y, modulus);
+		auto V = mont.mul(U, U);
+		auto W = mont.mul(U, V);
+		auto S = mont.mul(Pm.X, V);
+		auto X1_2 = mont.mul(Pm.X, Pm.X);
+		auto ZZ1_2 = mont.mul(Pm.ZZ, Pm.ZZ);
+		auto X1_2_t = mda::add(X1_2, X1_2, modulus);
+		auto X1_2_3 = mda::add(X1_2_t, X1_2, modulus);
+		auto ZZ1_2a = mont.mul(a_m, ZZ1_2);
+		auto M = mda::add(X1_2_3, ZZ1_2a, modulus);
+		auto M2 = mont.mul(M, M);
+		auto S2 = mda::add(S, S, modulus);
+		auto X3 = mda::sub(M2, S2, modulus);
+		auto SX3 = mda::sub(S, X3, modulus);
+		auto WY1 = mont.mul(W, Pm.Y);
+		auto MSX3 = mont.mul(M, SX3);
+		auto Y3 = mda::sub(MSX3, WY1, modulus);
+		auto ZZ3 = mont.mul(V, Pm.ZZ);
+		auto ZZZ3 = mont.mul(W, Pm.ZZZ);
+
+		return XYZZPoint<Bits>{
+			std::move(X3),
+			std::move(Y3),
+			std::move(ZZ3),
+			std::move(ZZZ3)
+		};
+	}
+
+	auto dbl(const XYZZPoint<Bits> &P) const
+	    -> XYZZPoint<Bits>
+	{
+		if(P.ZZ.is_zero()) {
+			return P;
+		}
+		if(P.Y.is_zero()) {
+			return XYZZPoint<Bits>{};
+		}
+
+		auto Pm = P.mont(mont);
+
+		auto Rm = dbl_m(Pm);
 
 		return Rm.demont(mont);
 	}
@@ -615,6 +706,24 @@ public:
 		return p;
 	}
 
+	auto to_affine(const XYZZPoint<Bits> &p) const -> AffinePoint<Bits>
+	{
+		if(p.ZZ.is_zero()) return AffinePoint<Bits>{};
+
+		auto Pm = p.mont(mont);
+
+		auto zz_inv = mont.inv(Pm.ZZ);
+		auto zzz_inv = mont.inv(Pm.ZZZ);
+
+		auto x = mont.mul(Pm.X, zz_inv);
+		auto y = mont.mul(Pm.Y, zzz_inv);
+
+		return AffinePoint<Bits>{
+			std::move(mont.trans_back(x)),
+			std::move(mont.trans_back(y))
+		};
+	}
+
 	auto to_affine(const ProjectivePoint<Bits> &p) const
 	    -> AffinePoint<Bits>
 	{
@@ -660,6 +769,24 @@ public:
 		return is_on_curve_m(Pm.x, Pm.y);
 	}
 
+	auto is_on_curve(const XYZZPoint<Bits> &p) const -> bool
+	{
+		if(p.ZZ.is_zero()) return true;
+
+		auto Pm = p.mont(mont);
+
+		auto zz_zzz = mont.mul(Pm.ZZ, Pm.ZZZ);
+		auto inv = mont.inv(zz_zzz);
+
+		auto zz_inv = mont.mul(inv, Pm.ZZZ);
+		auto zzz_inv = mont.mul(inv, Pm.ZZ);
+
+		auto x = mont.mul(Pm.X, zz_inv);
+		auto y = mont.mul(Pm.Y, zzz_inv);
+
+		return this->is_on_curve_m(x, y);
+	}
+
 	auto is_on_curve(const ProjectivePoint<Bits> &p) const -> bool
 	{
 		if(p.Z.is_zero()) return true;
@@ -671,7 +798,7 @@ public:
 		auto x = mont.mul(Pm.X, z_inv);
 		auto y = mont.mul(Pm.Y, z_inv);
 
-		return is_on_curve(x, y);
+		return this->is_on_curve_m(x, y);
 	}
 
 	auto is_on_curve(const JacobianPoint<Bits> &p) const -> bool
@@ -686,7 +813,7 @@ public:
 		auto x = mont.mul(Pm.X, mont.inv(z2));
 		auto y = mont.mul(Pm.Y, mont.inv(z3));
 
-		return is_on_curve_m(x, y);
+		return this->is_on_curve_m(x, y);
 	}
 
 private:

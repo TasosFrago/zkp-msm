@@ -37,6 +37,8 @@ auto make_point(const bga::BigInt<N> &x, const bga::BigInt<N> &y)
 		return P(x, y, bga::BigInt<N>(1));
 	} else if constexpr(std::is_same_v<P, ecc::ProjectivePoint<N>>) {
 		return P(x, y, bga::BigInt<N>(1));
+	} else if constexpr(std::is_same_v<P, ecc::XYZZPoint<N>>) {
+		return P(x, y, bga::BigInt<N>(1), bga::BigInt<N>(1));
 	}
 	std::unreachable();
 }
@@ -130,6 +132,9 @@ struct TestECCArithmetic<ecc::ShortWeierstrassCurve, PointT> {
 
 	static_assert(ecc::EllipticCurveConcept<ecc::ShortWeierstrassCurve<32>, ecc::JacobianPoint<32>>,
 		      "Concept Error: ShortWeierstrassCurve and JacobianPoint does not meet requirements");
+
+	static_assert(ecc::EllipticCurveConcept<ecc::ShortWeierstrassCurve<32>, ecc::XYZZPoint<32>>,
+		      "Concept Error: ShortWeierstrassCurve and XYZZ does not meet requirements");
 
 	template <size_t N>
 	void operator()(std::mt19937_64 &gen) const noexcept
@@ -301,6 +306,12 @@ struct TestECCscalarMul<ecc::ShortWeierstrassCurve, PointT> {
 	static_assert(ecc::EllipticCurveConcept<ecc::ShortWeierstrassCurve<32>, ecc::JacobianPoint<32>>,
 		      "Concept Error: ShortWeierstrassCurve and JacobianPoint does not meet requirements");
 
+	static_assert(ecc::EllipticCurveConcept<ecc::ShortWeierstrassCurve<32>, ecc::ProjectivePoint<32>>,
+		      "Concept Error: ShortWeierstrassCurve and Projective does not meet requirements");
+
+	static_assert(ecc::EllipticCurveConcept<ecc::ShortWeierstrassCurve<32>, ecc::XYZZPoint<32>>,
+		      "Concept Error: ShortWeierstrassCurve and XYZZ does not meet requirements");
+
 	template <size_t N>
 	void operator()(std::mt19937_64 &gen) const noexcept
 	{
@@ -343,9 +354,10 @@ struct TestECCscalarMul<ecc::TwistedEdwardsCurve, PointT> {
 
 		const auto &primes = StaticPrimes<N>::primes_list;
 		std::uniform_int_distribution<size_t> p_dist(0, StaticPrimes<N>::count() - 1);
-		FieldT mod_p = primes[p_dist(gen)];
+		size_t p_idx = p_dist(gen);
+		FieldT mod_p = primes[p_idx];
 
-		auto rng = genRandBgN(StaticPrimes<N>::get_length(0), gen);
+		auto rng = genRandBgN(StaticPrimes<N>::get_length(p_idx) - 1, gen);
 		FieldT x = rng(), y = rng(), a = rng();
 		while(x >= mod_p || x.is_zero()) x = rng();
 		while(y >= mod_p || y.is_zero()) y = rng();
@@ -408,6 +420,11 @@ void register_ecc_tests()
 	    TestECCArithmetic<ecc::ShortWeierstrassCurve, ecc::JacobianPoint>{});
 
 	TESTS.register_test<BITS_TEST_MOD___N>(
+	    "ECC ShortWeierstrass XYZZ arth",
+	    400,
+	    TestECCArithmetic<ecc::ShortWeierstrassCurve, ecc::XYZZPoint>{});
+
+	TESTS.register_test<BITS_TEST_MOD___N>(
 	    "ECC TwistedEdwards ExtProj arth",
 	    400,
 	    TestECCArithmetic<ecc::TwistedEdwardsCurve, ecc::ExtProjPoint>{});
@@ -426,6 +443,11 @@ void register_ecc_tests()
 	    "ECC SWC Jacobian scalarMull",
 	    1,
 	    TestECCscalarMul<ecc::ShortWeierstrassCurve, ecc::JacobianPoint>{});
+
+	TESTS.register_test<BITS_TEST_MOD___N>(
+	    "ECC SWC XYZZ scalarMull",
+	    1,
+	    TestECCscalarMul<ecc::ShortWeierstrassCurve, ecc::XYZZPoint>{});
 
 	TESTS.register_test<BITS_TEST_MOD___N>(
 	    "ECC SWC TwistedEdwards ExtProj scalarMull",
