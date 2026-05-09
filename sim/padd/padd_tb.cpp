@@ -44,10 +44,12 @@ int main(int argc, char **argv)
 	std::println("MOD: {}", MOD);
 	std::println("THREADS: {}", THREADS);
 
-	constexpr int BATCHES = 3;
+	constexpr int BATCHES = 2;
 	std::println("BATCHES: {}", BATCHES);
 	constexpr int NUM_TESTS = BATCHES * THREADS;
-	// constexpr int NUM_TESTS = 27 + 5;
+
+	constexpr bool PADD = false;
+	std::println("Test is {}", (PADD) ? "PADD" : "PDBL");
 
 	std::mt19937 rng(42);
 	auto gen = genRandBgN(77, rng);
@@ -104,9 +106,14 @@ int main(int argc, char **argv)
 		const char *name;
 		char type;
 	};
-	const OpType OP_SEQ[] = {
-		{ "U2", 'M' }, { "S2", 'M' }, { "P", 'A' }, { "R", 'A' }, { "PP", 'M' }, { "R2", 'M' }, { "PPP", 'M' }, { "Q", 'M' }, { "ZZ3", 'M' }, { "X3_sub1", 'A' }, { "Y1P", 'M' }, { "ZZZ3", 'M' }, { "2Q", 'A' }, { "X3", 'A' }, { "QsubX3", 'A' }, { "RT", 'M' }, { "Y3", 'A' }
+	const OpType OP_SEQ_PADD[] = {
+		{ "U2", 'M' }, { "S2", 'M' }, { "P", 'S' }, { "R", 'S' }, { "PP", 'M' }, { "RR", 'M' }, { "PPP", 'M' }, { "Q", 'M' }, { "ZZ3", 'M' }, { "X3t1", 'S' }, { "Q2", 'A' }, { "Y1P", 'M' }, { "ZZZ3", 'M' }, { "X3", 'S' }, { "QsX3", 'S' }, { "RT", 'M' }, { "Y3", 'S' }
 	};
+	const OpType OP_SEQ_PDBL[] = {
+		{ "ZZ1_2", 'M' }, { "X1_2", 'M' }, { "U", 'A' }, { "V", 'M' }, { "ZZ1_2a", 'M' }, { "X1_2_t", 'A' }, { "X1_2_3", 'A' }, { "S", 'M' }, { "W", 'M' }, { "ZZ3", 'M' }, { "M", 'A' }, { "M2", 'M' }, { "2S", 'A' }, { "WY1", 'M' }, { "ZZZ3", 'M' }, { "X3", 'S' }, { "SX3", 'S' }, { "MSX3", 'M' }, { "Y3", 'S' }
+	};
+	const OpType *OP_SEQ = (PADD) ? OP_SEQ_PADD : OP_SEQ_PDBL;
+
 	struct InFlightOp {
 		int start_c;
 		std::string name;
@@ -126,6 +133,7 @@ int main(int argc, char **argv)
 	tick();
 
 	std::queue<std::pair<TestCase, ecc::XYZZPoint<W>>> expected_queue;
+	std::queue<std::pair<ecc::XYZZPoint<W>, ecc::XYZZPoint<W>>> expected_dbl_q;
 
 	int test_count = 0;
 	int pass_count = 0;
@@ -134,6 +142,7 @@ int main(int argc, char **argv)
 
 	int feed_step = 0;
 	TestCase current_test;
+	ecc::XYZZPoint<W> current_test_dbl;
 
 	int read_step = 0;
 	ecc::XYZZPoint<W> hw_result;
@@ -148,7 +157,7 @@ int main(int argc, char **argv)
 
 	int timeout = 0;
 	int print_timer = 0;
-	while(test_count < NUM_TESTS || !expected_queue.empty()) {
+	while(test_count < NUM_TESTS || (!expected_queue.empty() && PADD) || (!expected_dbl_q.empty() && !PADD)) {
 		dut->eval();
 
 		if(dut->padd->tb_vld_issue) {
@@ -194,12 +203,17 @@ int main(int argc, char **argv)
 			int step = dut->padd->tb_load_step;
 
 			const char *produces = "";
-			if(step == 0)
-				produces = (side == 0) ? "0: X1-X2" : "1: X1-X2";
-			else if(step == 1)
-				produces = (side == 0) ? "0: Y2-Y1" : "1: Y2-Y1";
-			else if(step == 2)
+			if(step == 0) {
+				produces = (side == 0) ? "0: X1-Y1" : "1: X1-Y1";
+			} else if(step == 1) {
 				produces = (side == 0) ? "0: ZZ1-ZZZ1" : "1: ZZ1-ZZZ1";
+			} else if(step == 2) {
+				if(PADD) {
+					produces = (side == 0) ? "0: X2-Y2" : "1: X2-Y2";
+				} else {
+					produces = (side == 0) ? "0: a" : "1: a";
+				}
+			}
 
 			std::println(csv_guard.get(), "{},1,L,{},{}", cycle, produces, tid);
 		}
@@ -209,23 +223,29 @@ int main(int argc, char **argv)
 
 			if(feed_step == 0) {
 				current_test.p_x = curve.mont.init(bga::bgint<W>(gen()));
-				if(current_test.p_x >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				current_test.p_y = curve.mont.init(bga::bgint<W>(gen()));
-				if(current_test.p_y >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				current_test.p_zz = curve.mont.init(bga::bgint<W>(gen()));
-				if(current_test.p_zz >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				current_test.p_zzz = curve.mont.init(bga::bgint<W>(gen()));
-				if(current_test.p_zzz >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				current_test.q_x = curve.mont.init(bga::bgint<W>(gen()));
-				if(current_test.q_x >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				current_test.q_y = curve.mont.init(bga::bgint<W>(gen()));
+
+				if(current_test.p_x >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
+				if(current_test.p_y >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
+				if(current_test.p_zz >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
+				if(current_test.p_zzz >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
+				if(current_test.q_x >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 				if(current_test.q_y >= mod_val) std::println("WARNING: Val @ {} is bigger than MOD", cycle);
 
 				ecc::XYZZPoint<W> Pm(current_test.p_x, current_test.p_y, current_test.p_zz, current_test.p_zzz);
-				ecc::AffinePoint<W> Qm(current_test.q_x, current_test.q_y, false);
 
-				auto expected = curve.add_m(Pm, Qm);
-				expected_queue.push({ current_test, expected });
+				if(PADD) {
+					ecc::AffinePoint<W> Qm(current_test.q_x, current_test.q_y, false);
+					auto expected = curve.add_m(Pm, Qm);
+					expected_queue.push({ current_test, expected });
+				} else {
+					auto expected = curve.dbl_m(Pm);
+					expected_dbl_q.push({ Pm, expected });
+				}
 
 				// Step 0: Idx 0 (Even) & Idx 1 (Odd)
 				vtb::to_vlwide(current_test.p_x, dut->bus0_in); // X1 -> Idx 0
@@ -235,9 +255,14 @@ int main(int argc, char **argv)
 				vtb::to_vlwide(current_test.p_zz, dut->bus0_in);  // ZZ1  -> Idx 2
 				vtb::to_vlwide(current_test.p_zzz, dut->bus1_in); // ZZZ1 -> Idx 3
 			} else if(feed_step == 2) {
-				// Step 2: Idx 4 (Even) & Idx 5 (Odd)
-				vtb::to_vlwide(current_test.q_x, dut->bus0_in); // X2 -> Idx 4
-				vtb::to_vlwide(current_test.q_y, dut->bus1_in); // Y2 -> Idx 5
+				if(PADD) {
+					// Step 2: Idx 4 (Even) & Idx 5 (Odd)
+					vtb::to_vlwide(current_test.q_x, dut->bus0_in); // X2 -> Idx 4
+					vtb::to_vlwide(current_test.q_y, dut->bus1_in); // Y2 -> Idx 5
+				} else {
+					vtb::to_vlwide(curve.a_m, dut->bus0_in);
+					vtb::to_vlwide(zero, dut->bus1_in);
+				}
 			}
 
 			feed_step++;
@@ -267,24 +292,46 @@ int main(int argc, char **argv)
 			else if(read_step == 3) {
 				hw_result.ZZZ = out_val;
 
-				if(expected_queue.empty()) {
+				if((expected_queue.empty() && PADD) || (expected_dbl_q.empty() && !PADD)) {
 					std::println("ERROR: Hardware produced valid_out, but test queue is empty!");
 					fail_count++;
 				} else {
-					auto [producer, exp] = expected_queue.front();
-					expected_queue.pop();
+					TestCase producer_log;
+					ecc::XYZZPoint<W> exp;
+
+					if(PADD) {
+						producer_log = expected_queue.front().first;
+						exp = expected_queue.front().second;
+						expected_queue.pop();
+					} else {
+						auto pm = expected_dbl_q.front().first;
+						exp = expected_dbl_q.front().second;
+						expected_dbl_q.pop();
+
+						producer_log.p_x = pm.X;
+						producer_log.p_y = pm.Y;
+						producer_log.p_zz = pm.ZZ;
+						producer_log.p_zzz = pm.ZZZ;
+						producer_log.q_x = curve.a_m;
+						producer_log.q_y = zero;
+					}
 
 					auto hw_res_back = hw_result.demont(curve.mont);
 					auto exp_back = exp.demont(curve.mont);
 
 					// FILE LOG
 					std::println(file_guard.get(), "\n--- Log at cycle {} (Time: {} ns)", cycle, (ctx->time() / 1000));
-					std::println(file_guard.get(), "\tProd from X1: {0:x} | {0}", producer.p_x);
-					std::println(file_guard.get(), "\tProd from Y1: {0:x} | {0}", producer.p_y);
-					std::println(file_guard.get(), "\tProd from ZZ1: {0:x} | {0}", producer.p_zz);
-					std::println(file_guard.get(), "\tProd from ZZZ1: {0:x} | {0}", producer.p_zzz);
-					std::println(file_guard.get(), "\tProd from X2: {0:x} | {0}", producer.q_x);
-					std::println(file_guard.get(), "\tProd from Y2: {0:x} | {0}", producer.q_y);
+					std::println(file_guard.get(), "\tProd from X1: {0:x} | {0}", producer_log.p_x);
+					std::println(file_guard.get(), "\tProd from Y1: {0:x} | {0}", producer_log.p_y);
+					std::println(file_guard.get(), "\tProd from ZZ1: {0:x} | {0}", producer_log.p_zz);
+					std::println(file_guard.get(), "\tProd from ZZZ1: {0:x} | {0}", producer_log.p_zzz);
+
+					if(PADD) {
+						std::println(file_guard.get(), "\tProd from X2: {0:x} | {0}", producer_log.q_x);
+						std::println(file_guard.get(), "\tProd from Y2: {0:x} | {0}", producer_log.q_y);
+					} else {
+						std::println(file_guard.get(), "\tCurve Param a: {0:x} | {0}", producer_log.q_x);
+					}
 
 					std::println(file_guard.get(), "\tOut X: {0:x} | {0}", hw_result.X);
 					std::println(file_guard.get(), "\tOut Y: {0:x} | {0}", hw_result.Y);
@@ -305,12 +352,16 @@ int main(int argc, char **argv)
 
 						auto print_error = [&](const char *type, bga::bgint<W> exp, bga::bgint<W> hw_res,
 								       bga::bgint<W> exp_b, bga::bgint<W> hw_res_b) {
-							std::println("\tProd from X1: {0:x} | {0}", producer.p_x);
-							std::println("\tProd from Y1: {0:x} | {0}", producer.p_y);
-							std::println("\tProd from ZZ1: {0:x} | {0}", producer.p_zz);
-							std::println("\tProd from ZZZ1: {0:x} | {0}", producer.p_zzz);
-							std::println("\tProd from X2: {0:x} | {0}", producer.q_x);
-							std::println("\tProd from Y2: {0:x} | {0}", producer.q_y);
+							std::println("\tProd from X1: {0:x} | {0}", producer_log.p_x);
+							std::println("\tProd from Y1: {0:x} | {0}", producer_log.p_y);
+							std::println("\tProd from ZZ1: {0:x} | {0}", producer_log.p_zz);
+							std::println("\tProd from ZZZ1: {0:x} | {0}", producer_log.p_zzz);
+							if(PADD) {
+								std::println("\tProd from X2: {0:x} | {0}", producer_log.q_x);
+								std::println("\tProd from Y2: {0:x} | {0}", producer_log.q_y);
+							} else {
+								std::println(file_guard.get(), "\tCurve Param a: {0:x} | {0}", producer_log.q_x);
+							}
 
 							std::println("\tMontgomery Repr:");
 							std::println("\tExpected {}:   {:x} \tMISS", type, exp);
@@ -360,7 +411,7 @@ int main(int argc, char **argv)
 
 		if(print_timer >= 10000) {
 			print_timer = 0;
-			std::print("Now @ cycle {} (time: {} ns), currently passed: {}, failed: {}, timeout: {}\r", cycle, ctx->time() / 1000, pass_count_back, fail_count, timeout);
+			std::print("Now @ cycle {} (time: {} ns), currently passed: {}, failed: {}, timeout: {}, (Batches Passed: {})\r", cycle, ctx->time() / 1000, pass_count_back, fail_count, timeout, (pass_count_back / THREADS));
 		}
 
 		print_timer++;

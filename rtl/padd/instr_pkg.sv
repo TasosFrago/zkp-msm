@@ -84,7 +84,6 @@ package instr_pkg;
     // INSTRUCTIONS ROM
     // ==========================================
 
-    localparam int NUM_OPS = 17;
 
     // localparam instr_t instr_rom[NUM_OPS] = '{
     //     '{OP_MUL, X2, ZZ1, U2},  // U2   = X2 * ZZ1

@@ -26,10 +26,13 @@ module padd #(
     instr_t instr_rom  [NUM_OPS];
     string  instr_file;
 
+    // localparam int NUM_OPS = 17;
+    localparam int NUM_OPS = 19;
+
     initial begin
         if ($value$plusargs("MEM_FILE=%s", instr_file)) begin
-            $readmemh({instr_file, "padd_instructions.mem"}, instr_rom);
-            $display("Loaded instructions from %s", {instr_file, "padd_instructions.mem"});
+            $readmemh({instr_file, "pdbl_instructions.mem"}, instr_rom);
+            $display("Loaded instructions from %s", {instr_file, "pdbl_instructions.mem"});
         end
         else begin
             $readmemh("padd_instructions.mem", instr_rom);
@@ -356,7 +359,7 @@ module padd #(
         .NUMBER_SIZE(NUMBER_SIZE),
         .W(W),
         .MAX_THREADS(THREAD_CNT),
-        .BANK_SLOTS('{6, 2, 2, 2}),
+        .BANK_SLOTS('{6, 3, 2, 2}),
         .MAX_DEPTH(6)
     ) val_regfile (
         .clk(clk),

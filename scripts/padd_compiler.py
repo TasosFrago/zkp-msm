@@ -217,7 +217,7 @@ class Compiler:
         return final_mapping
 
     def generate_assembly(self, scheduled_instrs: list[Instr_t], mapping: dict[str, Operand_t]):
-        print("--- Final Re-Mapped Assembly ---")
+        print(f"--- Final Re-Mapped Assembly (NUM_OPS: {len(scheduled_instrs)}) ---")
         for instr in scheduled_instrs:
             d_reg = mapping[instr.dest]
             a_reg = mapping[instr.src_a]
@@ -237,13 +237,10 @@ class Compiler:
             print(f"{og:<25} | {new}")
 
     def print_statistics(self, mapping: dict[str, Operand_t], number_size_bits: int = 256, max_threads: int = 27):
-            """Calculates and prints hardware memory utilization statistics."""
             print("\n--- Hardware Utilization Statistics ---")
 
-            # Calculate the maximum index (slots used) per bank
             bank_slots = {0: 0, 1: 0, 2: 0, 3: 0}
             for op in mapping.values():
-                # The number of slots used is the highest index + 1
                 bank_slots[op.bank] = max(bank_slots[op.bank], op.idx + 1)
 
             active_banks = sum(1 for slots in bank_slots.values() if slots > 0)
@@ -266,9 +263,9 @@ class Compiler:
             print("-" * 39)
             print(f"Total Memory:          | {total_mem_bits:>4} bits | {total_mem_bytes:>3} bytes")
 
-    def generate_hex(self, schead_instr: list[Instr_t], mapping: dict[str, Operand_t], filename: str):
+    def generate_hex(self, sched_instr: list[Instr_t], mapping: dict[str, Operand_t], filename: str):
         with open(filename, 'w') as f:
-            for i, instr in enumerate(schead_instr):
+            for i, instr in enumerate(sched_instr):
                 dest_reg = mapping[instr.dest]
                 src_a_reg = mapping[instr.src_a]
                 src_b_reg = mapping[instr.src_b]
@@ -282,6 +279,14 @@ class Compiler:
 
                 f.write(f"{val:06x}\n")
                 print(f"{val:06x}\n", end="")
+
+    def generate_tb_op_seq(self, sched_instr: list[Instr_t]):
+        print("const OpType OP_SEQ[] = {")
+        print("\t", end="")
+        for i, instr in enumerate(sched_instr):
+            ending = ", " if i < len(sched_instr)-1 else ''
+            print(f"""{{ "{instr.dest}", '{instr.op_type}' }}{ending}""", end="")
+        print("\n};")
 
     def generate_gtkwave_filter(self, mapping: dict[str, Operand_t], filename: str):
         src_filename = filename.replace('.txt', '_src.txt')
@@ -352,7 +357,7 @@ dbl_initial_mapping = {
     'Y1':   Operand_t(True, 0, 1),
     'ZZ1':  Operand_t(True, 0, 2),
     'ZZZ1': Operand_t(True, 0, 3),
-    'a': Operand_t(True, 0, 4)
+    'a':    Operand_t(True, 0, 4)
 }
 
 dbl_output_vals = {'X3': 1, 'Y3': 2, 'ZZ3': 3, 'ZZZ3': 4}
@@ -379,6 +384,43 @@ instructions_double = [
     Instr_t('M', 'ZZZ3',   'W',      'ZZZ1'),
 ]
 
+complete_initial_mapping = {
+    'X1':   Operand_t(True, 0, 0),
+    'Y1':   Operand_t(True, 0, 1),
+    'ZZ1':  Operand_t(True, 0, 2),
+    'ZZZ1': Operand_t(True, 0, 3),
+    'X2':   Operand_t(True, 0, 4),
+    'Y2':   Operand_t(True, 0, 5),
+    'ZZ2':  Operand_t(True, 0, 6),
+    'ZZZ2': Operand_t(True, 0, 7),
+}
+
+output_vals = {'X3': 1, 'Y3': 2, 'ZZ3': 3, 'ZZZ3': 4}
+
+complete_padd_instr = [
+    Instr_t('M', 'U1', 'X1', 'ZZ2'),
+    Instr_t('M', 'U2', 'X2', 'ZZ1'),
+    Instr_t('M', 'S1', 'Y1', 'ZZZ2'),
+    Instr_t('M', 'S2', 'Y2', 'ZZZ1'),
+    Instr_t('S', 'P', 'U2', 'U1'),
+    Instr_t('S', 'R', 'S2', 'S1'),
+    Instr_t('M', 'PP', 'P', 'P'),
+    Instr_t('M', 'PPP', 'PP', 'P'),
+    Instr_t('M', 'Q', 'U1', 'PP'),
+    Instr_t('A', 'Q2', 'Q', 'Q'),
+    Instr_t('M', 'R2', 'R', 'R'),
+    Instr_t('S', 'X3s1', 'R2', 'PPP'),
+    Instr_t('S', 'X3', 'X3s1', 'Q2'),
+    Instr_t('S', 'QsX3', 'Q', 'X3'),
+    Instr_t('M', 'RQsX3', 'R', 'QsX3'),
+    Instr_t('M', 'S1sPPP', 'S1', 'PPP'),
+    Instr_t('S', 'Y3', 'RQsX3', 'S1sPPP'),
+    Instr_t('M', 'ZZ', 'ZZ1', 'ZZ2'),
+    Instr_t('M', 'ZZ3', 'ZZ', 'PP'),
+    Instr_t('M', 'ZZZ', 'ZZZ1', 'ZZZ2'),
+    Instr_t('M', 'ZZZ3', 'ZZZ', 'PPP'),
+]
+
 if __name__ == '__main__':
     compiler = Compiler(initial_mapping, output_vals, _instructions)
     scheduled_instrs = compiler.list_schedule()
@@ -387,6 +429,8 @@ if __name__ == '__main__':
     compiler.print_statistics(mapping)
     compiler.generate_hex(scheduled_instrs, mapping, "./rtl/padd/instructions/padd_instructions.mem")
     compiler.generate_gtkwave_filter(mapping, "./sim/padd/operand_filter.txt")
+    compiler.generate_tb_op_seq(scheduled_instrs);
+    del compiler, scheduled_instrs, mapping
 
     compiler = Compiler(dbl_initial_mapping, dbl_output_vals, instructions_double)
     scheduled_instrs = compiler.list_schedule()
@@ -394,3 +438,14 @@ if __name__ == '__main__':
     compiler.generate_assembly(scheduled_instrs, mapping)
     compiler.print_statistics(mapping)
     compiler.generate_hex(scheduled_instrs, mapping, "./rtl/padd/instructions/pdbl_instructions.mem")
+    compiler.generate_tb_op_seq(scheduled_instrs);
+    del compiler, scheduled_instrs, mapping
+
+    compiler = Compiler(complete_initial_mapping, output_vals, complete_padd_instr)
+    scheduled_instrs = compiler.list_schedule()
+    mapping = compiler.register_assignment(scheduled_instrs)
+    compiler.generate_assembly(scheduled_instrs, mapping)
+    compiler.print_statistics(mapping)
+    compiler.generate_hex(scheduled_instrs, mapping, "./rtl/padd/instructions/pcadd_instructions.mem")
+    compiler.generate_gtkwave_filter(mapping, "./sim/padd/operand_filter.txt")
+    compiler.generate_tb_op_seq(scheduled_instrs);
