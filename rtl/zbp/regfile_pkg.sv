@@ -30,10 +30,4 @@ package regfile_pkg;
     localparam logic [SR_IDX_W-1:0] STID_REG = S_G_REGS + 1;
     localparam logic [SR_IDX_W-1:0] SL_REG_START = S_G_REGS + 2;
 
-    // Execution unit tag
-    typedef enum logic [2:0] {
-        EU_ADD,
-        EU_MUL
-    } eu_tag_t;
-
 endpackage : regfile_pkg

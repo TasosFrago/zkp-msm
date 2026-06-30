@@ -1,5 +1,6 @@
 module scoreboard
     import regfile_pkg::*;
+    import zbp_pkg::*;
 #(
     parameter int MAX_THREADS = 32,
 
