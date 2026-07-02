@@ -4,9 +4,21 @@ package zbp_pkg;
         TRUE  = 1'b1
     } bool_t;
 
+    localparam int NUMBER_SIZE = 256;
+    localparam int W = 32;
+    localparam int CHUNKS = (NUMBER_SIZE / W);
+
     localparam int MAX_THREADS = 32;
     localparam int TID_W = $clog2(MAX_THREADS);
+
     localparam int REGISTERS = 32;
+    localparam int R_IDX_W = $clog2(REGISTERS);
+    localparam logic [4:0] VREGISTERS = 20;
+
+    typedef enum logic [R_IDX_W-1:0] {
+        ZERO_REG = 'd0,
+        TID_REG  = 'd4
+    } reg_idx_e;
 
     typedef struct packed {
         logic [TID_W-1:0] tid;
@@ -60,6 +72,7 @@ package zbp_pkg;
         OP_SRA,
         OP_SLT,
         OP_SLTU,
+        OP_MUL,
         OP_LUI,
         OP_AUIPC,
         OP_CTZ,
@@ -125,8 +138,8 @@ package zbp_pkg;
     } imm_t;
 
     typedef struct packed {
-        logic [$bits(imm_t) - $clog2(REGISTERS) - 1 - 1:0] _pad;
-        logic [$clog2(REGISTERS)-1:0] idx;
+        logic [$bits(imm_t) - R_IDX_W - 1 - 1:0] _pad;
+        logic [R_IDX_W-1:0] idx;
         logic is_v;
     } rs2_op_t;
 
@@ -142,7 +155,7 @@ package zbp_pkg;
 
     typedef struct packed {
         logic en;
-        logic [$clog2(REGISTERS)-1:0] idx;
+        logic [R_IDX_W-1:0] idx;
         logic is_v;
     } op_info_t;
 
@@ -155,14 +168,71 @@ package zbp_pkg;
         op_info_t rs1;
         rs2_t     rs2;
         op_info_t rd;
+        logic     rd_is_rs;
     } decode_out_t;
 
-    localparam op_info_t ZERO_REG = '{
+    typedef struct packed {
+        logic               en;
+        logic [  TID_W-1:0] tid;
+        logic [R_IDX_W-1:0] rd;
+    } wb_tag_t;
+
+    typedef struct packed {
+        logic [TID_W-1:0] tid;
+        logic [31:0]      pc;
+        eu_tag_t eu_tag;
+        op_tag_t op_tag;
+
+        op_info_t rs1;
+        rs2_t     rs2;
+        op_info_t rd;
+        logic     rd_is_rs;
+
+        logic read_stall;
+    } scoreboard_out_t;
+
+    // REGFILE_STAGE
+
+    typedef struct packed {
+        wb_tag_t tag;
+        logic [NUMBER_SIZE-1:0] data;
+    } vwb_t;
+
+    typedef struct packed {
+        wb_tag_t tag;
+        logic [W-1:0] data;
+    } swb_t;
+
+    typedef struct packed {
+        logic [TID_W-1:0] tid;
+        logic [31:0] pc;
+        eu_tag_t eu_tag;
+        op_tag_t op_tag;
+
+        op_info_t rd;
+
+        logic rs2_is_imm;
+        imm_t imm;
+
+        logic [NUMBER_SIZE-1:0] rs1;
+        logic [NUMBER_SIZE-1:0] rs2;
+    } exec_in_t;
+
+    typedef struct packed {
+        cf_redirect_t cf_redirect_p;
+        cf_pc_adv_t   cf_pc_adv_p;
+
+        swb_t wbS;
+        vwb_t wbA;
+        vwb_t wbB;
+    } wb_out_t;
+
+    localparam op_info_t OP_ZERO_REG = '{
         en: TRUE,
         idx: '0,
         is_v: FALSE
     };
-    localparam rs2_t RS2_ZERO_REG = '{
+    localparam rs2_t OP_RS2_ZERO_REG = '{
         is_imm: FALSE,
         val: '{
             as_r: '{

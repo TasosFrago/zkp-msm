@@ -1,7 +1,4 @@
-module imem
-    import zbp_pkg::imem_req_t;
-    import zbp_pkg::imem_rsp_t;
-#(
+module imem #(
     parameter string INIT_FILE = "",
     parameter int MEM_SIZE_WORDS = 1024,
     parameter logic RANDOM_STALLS = 1'b0
@@ -15,6 +12,8 @@ module imem
 
     logic [31:0] imem_arr[MEM_SIZE_WORDS];
 
+    import zbp_pkg::imem_req_t;
+    import zbp_pkg::imem_rsp_t;
     import zbp_pkg::NOOP_INSTR;
 
     initial begin

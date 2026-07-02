@@ -4,11 +4,8 @@ module fetch
     input logic clk,
     input logic rst,
 
-    output logic [31:0] imem_addr,
-    input  logic [31:0] imem_data,
-
-    pipeline_if.in  imem_req_if,
-    pipeline_if.out imem_rsp_if,
+    pipeline_if.out imem_req_if,
+    pipeline_if.in  imem_rsp_if,
 
     input cf_redirect_t cf_redirect,
     input cf_pc_adv_t   cf_pc_adv,
@@ -40,11 +37,11 @@ module fetch
             if (~busy_tb[tid_ptr]) begin
                 if (imem_req_if.ready) begin
                     busy_tb[tid_ptr] <= 1'b1;
-                    tid_ptr <= (tid_ptr == MAX_THREADS-1) ? '0 : tid_ptr + 1'b1;
+                    tid_ptr <= (tid_ptr == TID_W'(MAX_THREADS-1)) ? '0 : tid_ptr + 1'b1;
                 end
             end
             else begin
-                tid_ptr <= (tid_ptr == MAX_THREADS-1) ? '0 : tid_ptr + 1'b1;
+                tid_ptr <= (tid_ptr == TID_W'(MAX_THREADS-1)) ? '0 : tid_ptr + 1'b1;
             end
 
             if (cf_pc_adv.vld)   busy_tb[cf_pc_adv.tid] <= 1'b0;

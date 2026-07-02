@@ -28,18 +28,20 @@ module decode
 
     assign cimm_i = { {8{instr[31]}}, instr[31:20] };
     assign cimm_s = { {8{instr[31]}}, instr[31:25], instr[11:7] };
-    assign cimm_b = { {8{instr[31]}}, instr[7], instr[30:25], instr[11:8] };
+    assign cimm_b = { {9{instr[31]}}, instr[7], instr[30:25], instr[11:8] };
     assign cimm_j = { instr[31], instr[19:12], instr[20], instr[30:21] };
     assign cimm_u = { instr[31:12] };
 
     always_comb begin
-        out_data = '{default: '0};
-        out_data.tid    = in_data.tid;
-        out_data.eu_tag = EU_NOOP;
-        out_data.op_tag = OP_NONE;
-        out_data.rs1    = ZERO_REG;
-        out_data.rs2    = RS2_ZERO_REG;
-        out_data.rd     = ZERO_REG;
+        out_data = '{eu_tag: EU_NOOP, op_tag: OP_NONE, default: '0};
+        out_data.tid      = in_data.tid;
+        out_data.pc       = in_data.pc;
+        out_data.eu_tag   = EU_NOOP;
+        out_data.op_tag   = OP_NONE;
+        out_data.rs1      = OP_ZERO_REG;
+        out_data.rs2      = OP_RS2_ZERO_REG;
+        out_data.rd       = OP_ZERO_REG;
+        out_data.rd_is_rs = FALSE;
 
         case (opcode)
             OPCODE_OP: begin
@@ -92,8 +94,8 @@ module decode
                 };
 
                 out_data.rs2.is_imm      = TRUE;
-                out_data.rs2.as_imm.fmt  = IMM_I_S;
-                out_data.rs2.as_imm.bits = cimm_i;
+                out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                out_data.rs2.val.as_imm.bits = cimm_i;
 
                 case (funct3)
                     F3_ADD_SUB: out_data.op_tag = OP_ADD;
@@ -102,11 +104,11 @@ module decode
                         case (instr[31:25])
                             F7_BASE: begin
                                 out_data.op_tag = OP_SLL;
-                                out_data.rs2.as_imm.bits = { 15'b0, instr[24:20] };
+                                out_data.rs2.val.as_imm.bits = { 15'b0, instr[24:20] };
                             end
                             F7_ALT: begin
                                 out_data.op_tag = (instr[24:20] == 5'h01) ? OP_CTZ : OP_INVALID;
-                                out_data.rs2.as_imm.bits = '0;
+                                out_data.rs2.val.as_imm.bits = '0;
                             end
                             default: out_data.op_tag = OP_INVALID;
                         endcase
@@ -117,7 +119,7 @@ module decode
                     F3_XOR:     out_data.op_tag = OP_XOR;
                     F3_SRL_SRA: begin
                         out_data.op_tag = (funct7 == F7_ALT) ? OP_SRA : OP_SRL;
-                        out_data.rs2.as_imm.bits = { 15'b0, instr[24:20] };
+                        out_data.rs2.val.as_imm.bits = { 15'b0, instr[24:20] };
                     end
                     F3_OR:      out_data.op_tag = OP_OR;
                     F3_AND:     out_data.op_tag = OP_AND;
@@ -164,6 +166,7 @@ module decode
                 };
 
                 // On the STORE instrs we repurpose rd to rs2 because rs2 holds imm
+                out_data.rd_is_rs = TRUE;
                 out_data.rd = '{
                     en:   TRUE,
                     idx:  instr[24:20],
@@ -191,6 +194,7 @@ module decode
                     is_v: FALSE
                 };
 
+                out_data.rd_is_rs = TRUE;
                 out_data.rd = '{
                     en:   TRUE,
                     idx:  instr[24:20],
