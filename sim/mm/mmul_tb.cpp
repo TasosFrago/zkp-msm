@@ -107,6 +107,9 @@ int main(int argc, char **argv)
 	dut->rst = 0;
 	tick();
 
+	vtb::to_vlwide(mod_val, dut->modulus);
+	dut->n_prime = mont.n_p;
+
 	constexpr int NUM_TESTS = 10000;
 	constexpr int PIPELINE_STAGES = 3 * CHUNKS; // 3 * (CHUNKS - 1) + 3;
 
@@ -115,6 +118,9 @@ int main(int argc, char **argv)
 	int pass_count = 0;
 	int fail_count = 0;
 	int unreduced_count = 0;
+	int vpass_count = 0;
+	int vfail_count = 0;
+	int vunreduced_count = 0;
 
 	for(int i = 0; i < NUM_TESTS; i++) {
 		bga::bgint<W> A(gen());
@@ -140,6 +146,20 @@ int main(int argc, char **argv)
 			expected_queue.pop();
 
 			bga::bgint<W> hw_res_p = vtb::to_bgint<W>(dut->res_p);
+			bga::bgint<W> hw_res_v = vtb::to_bgint<W>(dut->res_v);
+
+			if(hw_res_v == expected) {
+				vpass_count++;
+			} else if(bga::sub<W>(hw_res_v, mod_val) == expected) {
+				vpass_count++;
+				vunreduced_count++;
+			} else {
+				vfail_count++;
+				std::println("Mismatch at pipeline read! VAR");
+				std::println("Expected (Reduced):   {}", expected);
+				std::println("Expected (Unreduced): {}", bga::add<W>(expected, mod_val));
+				std::println("Got from Hardware:    {}", hw_res_v);
+			}
 
 			if(hw_res_p == expected) {
 				pass_count++;
@@ -167,6 +187,19 @@ int main(int argc, char **argv)
 		auto expected = expected_queue.front();
 		expected_queue.pop();
 
+		bga::bgint<W> hw_res_v = vtb::to_bgint<W>(dut->res_v);
+		if(hw_res_v == expected) {
+			vpass_count++;
+		} else if(bga::sub<W>(hw_res_v, mod_val) == expected) {
+			vpass_count++;
+			vunreduced_count++;
+		} else {
+			vfail_count++;
+			std::println("Mismatch during pipeline flush! VAR");
+			std::println("Expected: {:x}", expected);
+			std::println("Got:      {:x}", hw_res_v);
+		}
+
 		auto hw_res_p = vtb::to_bgint<W>(dut->res_p);
 		if(hw_res_p == expected) {
 			pass_count++;
@@ -185,14 +218,23 @@ int main(int argc, char **argv)
 	std::println("Total Tests Run: {}", NUM_TESTS);
 	std::println("Passed: {}", pass_count);
 	std::println("Failed: {}", fail_count);
+	std::println("vPassed: {}", vpass_count);
+	std::println("vFailed: {}", vfail_count);
 	std::println("--------------------");
 	std::println("HW skipped final subtraction (Unreduced valid): {}", unreduced_count);
 	std::println("HW performed final subtraction (Reduced valid): {}", pass_count - unreduced_count);
+	std::println("HW skipped final subtraction (Unreduced valid) VAR: {}", vunreduced_count);
+	std::println("HW performed final subtraction (Reduced valid) VAR: {}", vpass_count - vunreduced_count);
 
 	if(fail_count == 0) {
 		std::println("\nSUCCESS: All tests passed!");
 	} else {
 		std::println("\nERROR: Testbench failed");
+	}
+	if(vfail_count == 0) {
+		std::println("\nSUCCESS: All tests passed! for var");
+	} else {
+		std::println("\nERROR: Testbench failed for var");
 	}
 
 	// auto print_hw = [](const bga::bgint<W> &in, const char *name, const bga::bgint<W> &gold) {

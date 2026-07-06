@@ -8,9 +8,12 @@ module mmul_top_tb #(
 
     input logic [(NUMBER_SIZE / W)-1:0][W-1:0] a,
     input logic [(NUMBER_SIZE / W)-1:0][W-1:0] b,
+    input logic [(NUMBER_SIZE / W)-1:0][W-1:0] modulus,
+    input logic [W-1:0] n_prime,
 
     output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res_n,
-    output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res_p
+    output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res_p,
+    output logic [(NUMBER_SIZE / W)-1:0][W-1:0] res_v
 );
 
     mmul #(
@@ -37,6 +40,20 @@ module mmul_top_tb #(
         .a  (a),
         .b  (b),
         .res(res_p)
+    );
+
+    mmul_variable #(
+        .NUMBER_SIZE(NUMBER_SIZE),
+        .W(W)
+    ) dut_var (
+        .clk(clk),
+        .rst(rst),
+
+        .a(a),
+        .b(b),
+        .modulus(modulus),
+        .n_prime(n_prime),
+        .res(res_v)
     );
 
 endmodule : mmul_top_tb
