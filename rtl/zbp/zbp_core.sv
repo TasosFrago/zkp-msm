@@ -6,9 +6,11 @@ module zbp_core
 
     // Instruction Memory Req/Rsp connection
     pipeline_if.out imem_req_if,
-    pipeline_if.in  imem_rsp_if
+    pipeline_if.in  imem_rsp_if,
 
     // Data Memory Req/Rsp connection
+    pipeline_if.out dmem_req_if,
+    pipeline_if.in  dmem_rsp_if
 );
 
     ////////////////////////////////////////////////////////
@@ -16,7 +18,6 @@ module zbp_core
     //                 PIPELINE INTERFACES                //
     //                                                    //
     ////////////////////////////////////////////////////////
-
     pipeline_if#(.T(fetch_out_t))      fetch_to_dec_if();
     pipeline_if#(.T(decode_out_t))     dec_to_scb_if();
     pipeline_if#(.T(scoreboard_out_t)) scb_to_rf_if();
@@ -26,6 +27,9 @@ module zbp_core
     wb_out_t wb_bus;
     assign wb_bus = ex_to_wb_if.data;
     assign ex_to_wb_if.ready = TRUE;
+
+    logic [4-1:0] bank_tracker;
+    logic [2-1:0] port_tracker;
 
     ////////////////////////////////////////////////////////
     //                                                    //
@@ -72,7 +76,10 @@ module zbp_core
 
         .wbA(wb_bus.wbA.tag),
         .wbB(wb_bus.wbB.tag),
-        .wbS(wb_bus.wbS.tag)
+        .wbS(wb_bus.wbS.tag),
+
+        .wb_bank_tracker_out(bank_tracker),
+        .wb_port_tracker_out(port_tracker)
     );
 
     ////////////////////////////////////////////////////////
@@ -102,7 +109,13 @@ module zbp_core
         .rst(rst),
 
         .exec_if(rf_to_ex_if),
-        .wb_if  (ex_to_wb_if)
+        .wb_if  (ex_to_wb_if),
+
+        .dmem_req_if(dmem_req_if),
+        .dmem_rsp_if(dmem_rsp_if),
+
+        .bank_tracker(bank_tracker),
+        .port_tracker(port_tracker)
     );
 
 endmodule : zbp_core

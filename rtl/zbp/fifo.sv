@@ -16,7 +16,7 @@ module fifo #(
     output logic [DATA_W-1:0] rd_data
 );
 
-    logic [DATA_W-1:0] mem [DETPH];
+    logic [DATA_W-1:0] mem [DEPTH];
 
     localparam int PTR_W = $clog2(DEPTH);
     localparam int CNT_W = $clog2(DEPTH + 1);
@@ -27,6 +27,7 @@ module fifo #(
 
     logic wr_en, rd_en;
 
+    assign wr_ready = (count < CNT_W'(DEPTH));
     assign rd_valid = (count > 0);
 
     assign wr_en = wr_valid & wr_ready;
@@ -45,7 +46,7 @@ module fifo #(
             if (wr_en) begin
                 mem[wr_ptr] <= wr_data;
 
-                if (wr_ptr == (DEPTH - 1)) begin
+                if (wr_ptr == PTR_W'(DEPTH - 1)) begin
                     wr_ptr <= '0;
                 end
                 else begin
@@ -54,7 +55,7 @@ module fifo #(
             end
 
             if (rd_en) begin
-                if (rd_ptr == (DEPTH - 1)) begin
+                if (rd_ptr == PTR_W'(DEPTH - 1)) begin
                     rd_ptr <= '0;
                 end
                 else begin

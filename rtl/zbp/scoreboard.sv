@@ -11,7 +11,10 @@ module scoreboard
     input wb_tag_t wbA,
     input wb_tag_t wbB,
 
-    input wb_tag_t wbS  // Writeback to scalar reg
+    input wb_tag_t wbS,  // Writeback to scalar reg
+
+    output logic [4-1:0] wb_bank_tracker_out,
+    output logic [2-1:0] wb_port_tracker_out
 );
 
     localparam int SIDX_W = $clog2(REGISTERS * MAX_THREADS);
@@ -22,6 +25,15 @@ module scoreboard
 
     logic [31:0] wb_bank_tracker[4];
     logic [31:0] wb_port_tracker[2];
+
+    always_comb begin
+        for(int b = 0; b < 4; b++) begin
+            wb_bank_tracker_out[b] = wb_bank_tracker[b][0];
+        end
+        for(int p = 0; p < 2; p++) begin
+            wb_port_tracker_out[p] = wb_port_tracker[p][0];
+        end
+    end
 
     decode_out_t dec_data;
     assign dec_data = '{
@@ -189,9 +201,25 @@ module scoreboard
     );
 
     // synthesis translate_off
+
+    property track_operands_not_rdy;
+        @(posedge clk) disable iff (rst)
+        decode_if.valid |-> operands_rdy;
+    endproperty
+
     property check_iss_v_rs1; @(posedge clk) disable iff (rst) (decode_if.valid & rs1.en & rs1.is_v) |-> (rs1.idx < VREGISTERS); endproperty
     property check_iss_v_rs2; @(posedge clk) disable iff (rst) (decode_if.valid & rs2.en & rs2.is_v) |-> (rs2.idx < VREGISTERS); endproperty
 
+
+    assert property (track_operands_not_rdy) else
+        $info("Operands_not_RDY, TID[%0d] | RS1: rdy: %b (idx: %0d),  RS2: rdy: %b (idx: %0d)",
+        dec_data.tid,
+        (rs1.en ?
+        (rs1.is_v ? vget_rdy(rs1.idx, dec_data.tid) : sget_rdy(rs1.idx, dec_data.tid)) :
+        1'b1), rs1.idx,
+        (rs2.en ?
+        (rs2.is_v ? vget_rdy(rs2.idx, dec_data.tid) : sget_rdy(rs2.idx, dec_data.tid)) :
+        1'b1), rs2.idx);
 
     assert property (check_iss_v_rs1) else $error("SCOREBOARD: Vector rs1 out of bounds");
     assert property (check_iss_v_rs2) else $error("SCOREBOARD: Vector rs2 out of bounds");

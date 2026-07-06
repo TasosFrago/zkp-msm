@@ -75,7 +75,7 @@ run: sim $(FW_TARGET)
 	@echo -e "\n\033[0;32m[SIM] Running $(TOP_MOD) testbench...\033[0m"
 	@cd $(BUILD_DIR) && ./V$(TOP_MOD) +MEM_FILE=$(abspath $(FW_TARGET))
 	@echo -e "\n\033[0;36m[SIM] Checking Register Dump (First 16 lines):\033[0m"
-	@head -n 16 $(BUILD_DIR)/scalar_regs_dump.hex || true
+	@head -n 16 $(BUILD_DIR)/scalar_regs_dump.txt || true
 
 compdb:
 	bear --output compile_commands.json -- $(MAKE) sim --always-make

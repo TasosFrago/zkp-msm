@@ -8,7 +8,7 @@ OBJCPY  = riscv64-unknown-elf-objcopy
 OBJDUMP = riscv64-unknown-elf-objdump
 
 # Flags
-OPTIMIZE = -O0
+OPTIMIZE = -O2
 CFLAGS   = -Wall -nostdlib -march=rv32imav -mabi=ilp32 $(OPTIMIZE)
 CFLAGS  += -Wl,-Map=$(BUILD_DIR)/program.map
 
@@ -17,11 +17,11 @@ OBJFLAGS = -O verilog --verilog-data-width=4 -S
 # Sources
 LSCRIPT   = bootstrap/lscript.ld
 BOOTSTRAP = bootstrap/boot.S
-SRC       = main.S
+C_SRC     = main.c
 
 # Output Artifacts
 BOOT_OBJ = $(BUILD_DIR)/boot.o
-SRC_OBJ  = $(BUILD_DIR)/main.o
+C_OBJ    = $(BUILD_DIR)/main.o
 ELF      = $(BUILD_DIR)/program.elf
 TARGET   = $(BUILD_DIR)/output.vh
 DUMP     = $(BUILD_DIR)/program.dump
@@ -38,16 +38,16 @@ $(TARGET): $(ELF)
 	$(OBJCPY) $(OBJFLAGS) $< $@
 
 # Link the objects into an ELF
-$(ELF): $(BOOT_OBJ) $(SRC_OBJ) $(LSCRIPT)
-	$(CC) $(CFLAGS) -T $(LSCRIPT) $(BOOT_OBJ) $(SRC_OBJ) -o $@
+$(ELF): $(BOOT_OBJ) $(C_OBJ) $(LSCRIPT)
+	$(CC) $(CFLAGS) -T $(LSCRIPT) $(BOOT_OBJ) $(C_OBJ) -o $@
 
-# Compile the assembly files into objects
+# Compile the assembly bootloader into an object
 $(BUILD_DIR)/boot.o: $(BOOTSTRAP)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/main.o: $(SRC)
+# Compile the C source into an object
+$(BUILD_DIR)/main.o: $(C_SRC)
 	$(CC) $(CFLAGS) -c $< -o $@
-
 
 dump: $(DUMP)
 

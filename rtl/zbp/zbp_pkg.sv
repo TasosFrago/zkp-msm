@@ -203,6 +203,25 @@ package zbp_pkg;
         logic [W-1:0] data;
     } swb_t;
 
+    typedef enum logic [1:0] {
+        DMEM_B,
+        DMEM_H,
+        DMEM_W,
+        DMEM_V
+    } dmem_size_t;
+
+    typedef struct packed {
+        logic [          W-1:0] addr;
+        logic                   send_data;
+        dmem_size_t             size;
+        logic [NUMBER_SIZE-1:0] data;
+    } dmem_req_t;
+
+    typedef struct packed {
+        dmem_size_t             size;
+        logic [NUMBER_SIZE-1:0] data;
+    } dmem_rsp_t;
+
     typedef struct packed {
         logic [TID_W-1:0] tid;
         logic [31:0] pc;
@@ -234,13 +253,11 @@ package zbp_pkg;
     };
     localparam rs2_t OP_RS2_ZERO_REG = '{
         is_imm: FALSE,
-        val: '{
-            as_r: '{
+        val: rs2_val_t'(rs2_op_t'{
                 _pad: '0,
                 idx: '0,
                 is_v: FALSE
-            }
-        }
+            })
     };
     localparam logic [31:0] NOOP_INSTR = 32'h00000013;
 

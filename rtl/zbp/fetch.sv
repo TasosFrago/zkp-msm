@@ -17,16 +17,17 @@ module fetch
     logic [MAX_THREADS-1:0] busy_tb;
     logic [TID_W-1:0] tid_ptr;
     logic buff_ready;
+    logic buff_rdy;
 
     // Issue Insruction fetch from IMEM
     imem_req_t req_data;
 
-    assign imem_req_if.valid = ~busy_tb[tid_ptr];
     assign req_data = '{
         tid: tid_ptr,
         pc:  pc_tb[tid_ptr]
     };
-    assign imem_req_if.data  = req_data;
+    // assign imem_req_if.valid = ~busy_tb[tid_ptr];
+    // assign imem_req_if.data  = req_data;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -35,7 +36,7 @@ module fetch
         end
         else begin
             if (~busy_tb[tid_ptr]) begin
-                if (imem_req_if.ready) begin
+                if (buff_rdy) begin
                     busy_tb[tid_ptr] <= 1'b1;
                     tid_ptr <= (tid_ptr == TID_W'(MAX_THREADS-1)) ? '0 : tid_ptr + 1'b1;
                 end
@@ -90,6 +91,21 @@ module fetch
         .valid_out(fetch_if.valid),
         .ready_out(fetch_if.ready),
         .data_out(fetch_if.data)
+    );
+
+    skid_buffer #(
+        .DATA_W($bits(imem_req_t))
+    ) imem_pipe_buff (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(~busy_tb[tid_ptr]),
+        .ready_in(buff_rdy),
+        .data_in(req_data),
+
+        .valid_out(imem_req_if.valid),
+        .ready_out(imem_req_if.ready),
+        .data_out(imem_req_if.data)
     );
 
 endmodule : fetch
