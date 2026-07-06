@@ -40,9 +40,14 @@ int main(int argc, char **argv)
 	constexpr int MAX_CYCLES = 1000;
 	for(int cycle = 0; cycle < MAX_CYCLES; cycle++) {
 		tick();
+		if (ctx->gotFinish()) {
+			break;
+		}
 	}
 
 	std::println("Simulation Complete.");
+
+	tfp.reset();
 
 	dut->final();
 	return 0;
