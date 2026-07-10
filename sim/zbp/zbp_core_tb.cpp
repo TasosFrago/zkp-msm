@@ -16,6 +16,8 @@ int main(int argc, char **argv)
 	auto fst_deleter = [](VerilatedFstC *p) { if(p) { p->close(); delete p; }};
 	std::unique_ptr<VerilatedFstC, decltype(fst_deleter)> tfp{ new VerilatedFstC, fst_deleter };
 
+	uint64_t cycles = 0;
+
 	dut->trace(tfp.get(), 99);
 	tfp->open("dump.fst");
 
@@ -28,6 +30,7 @@ int main(int argc, char **argv)
 		dut->eval();
 		tfp->dump(ctx->time());
 		ctx->timeInc(5000);
+		cycles++;
 	};
 
 	std::println("Starting CPU Simulation...");
@@ -37,15 +40,19 @@ int main(int argc, char **argv)
 	tick();
 	dut->rst = 0;
 
-	constexpr int MAX_CYCLES = 1000;
+	constexpr int MAX_CYCLES = 100000;
 	for(int cycle = 0; cycle < MAX_CYCLES; cycle++) {
 		tick();
-		if (ctx->gotFinish()) {
+		if(dut->program_done) {
+			std::println("PROGRAM DONE FLAG TRIGGERED!");
 			break;
 		}
+		// if (ctx->gotFinish()) {
+		// 	break;
+		// }
 	}
 
-	std::println("Simulation Complete.");
+	std::println("Simulation Complete after {} clk cycles", cycles);
 
 	tfp.reset();
 

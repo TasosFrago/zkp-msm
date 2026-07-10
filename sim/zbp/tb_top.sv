@@ -1,6 +1,8 @@
 module tb_top(
     input logic clk,
-    input logic rst
+    input logic rst,
+
+    output logic program_done
 );
 
     import zbp_pkg::imem_req_t;
@@ -49,7 +51,9 @@ module tb_top(
         .imem_rsp_if(imem_rsp_if),
 
         .dmem_req_if(dmem_req_if),
-        .dmem_rsp_if(dmem_rsp_if)
+        .dmem_rsp_if(dmem_rsp_if),
+
+        .program_done(program_done)
     );
 
 

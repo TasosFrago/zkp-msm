@@ -10,6 +10,7 @@ module fetch
     input cf_redirect_t cf_redirect,
     input cf_pc_adv_t   cf_pc_adv,
 
+    pipeline_if.in iss_back_if,
     pipeline_if.out fetch_if
 );
 
@@ -19,6 +20,10 @@ module fetch
     logic buff_ready;
     logic buff_rdy;
 
+    iss_back_t iss_back_d;
+    assign iss_back_d = iss_back_if.data;
+    assign iss_back_if.ready = TRUE;
+
     // Issue Insruction fetch from IMEM
     imem_req_t req_data;
 
@@ -26,8 +31,6 @@ module fetch
         tid: tid_ptr,
         pc:  pc_tb[tid_ptr]
     };
-    // assign imem_req_if.valid = ~busy_tb[tid_ptr];
-    // assign imem_req_if.data  = req_data;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -37,13 +40,17 @@ module fetch
         else begin
             if (~busy_tb[tid_ptr]) begin
                 if (buff_rdy) begin
-                    busy_tb[tid_ptr] <= 1'b1;
+                    busy_tb[tid_ptr] <= TRUE;
                     tid_ptr <= (tid_ptr == TID_W'(MAX_THREADS-1)) ? '0 : tid_ptr + 1'b1;
                 end
             end
             else begin
                 tid_ptr <= (tid_ptr == TID_W'(MAX_THREADS-1)) ? '0 : tid_ptr + 1'b1;
             end
+
+            // if (iss_back_if.valid & ~iss_back_d.issued) begin
+            //     busy_tb[iss_back_d.tid] <= FALSE;
+            // end
 
             if (cf_pc_adv.vld)   busy_tb[cf_pc_adv.tid] <= 1'b0;
             if (cf_redirect.vld) busy_tb[cf_redirect.tid] <= 1'b0;

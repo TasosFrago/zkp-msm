@@ -37,7 +37,7 @@ $(info [INFO]: SIM Debug mode OFF)
 endif
 
 V_FLAGS := --cc --exe --build -j $(shell nproc)
-V_FLAGS += --trace-fst --trace-structs
+V_FLAGS += --trace-fst --trace-structs --trace-max-array 128
 V_FLAGS += --Mdir $(abspath $(BUILD_DIR))
 V_FLAGS += --top-module $(TOP_MOD)
 V_FLAGS += -CFLAGS "$(V_CXXFLAGS)" -LDFLAGS "$(V_LDFLAGS)"

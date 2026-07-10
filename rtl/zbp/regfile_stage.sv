@@ -55,6 +55,10 @@ module regfile_stage
         imm_t imm;
 
         logic was_stall;
+
+        `ifdef DEBUG
+        logic [31:0] instr;
+        `endif
     } rf_hold_t;
 
     rf_hold_t hold;
@@ -130,6 +134,9 @@ module regfile_stage
             buffered_rs1 <= '0;
         end
         else if (~stall_out) begin
+            `ifdef DEBUG
+            hold.instr <= dec_data.instr;
+            `endif
             unique case (state)
                 RF_IDLE: begin
                     if (iss_if.valid & iss_if.ready) begin
@@ -196,6 +203,11 @@ module regfile_stage
         imm: hold.imm,
         rs1: rs1_val,
         rs2: rs2_val
+
+        `ifdef DEBUG
+        ,instr: hold.instr
+        `endif
+
     };
 
     vregfile vregfile_inst(

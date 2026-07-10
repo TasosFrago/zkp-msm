@@ -9,5 +9,11 @@ _start:
 
 	jal  ra, main
 
+	bnez tp, hang
+
+	li   a0, 0xF00000A0
+	li   a1, 1
+	sw   a1, 0(a0)
+
 hang:
 	j hang

@@ -1,3 +1,5 @@
+`define DEBUG
+
 package zbp_pkg;
     typedef enum logic {
         FALSE = 1'b0,
@@ -40,6 +42,11 @@ package zbp_pkg;
         logic vld;
         logic [TID_W-1:0] tid;
     } cf_pc_adv_t;
+
+    typedef struct packed {
+        logic issued;
+        logic [TID_W-1:0] tid;
+    } iss_back_t;
 
     typedef struct packed {
         logic [TID_W-1:0] tid;
@@ -169,6 +176,10 @@ package zbp_pkg;
         rs2_t     rs2;
         op_info_t rd;
         logic     rd_is_rs;
+
+        `ifdef DEBUG
+        logic [31:0] instr;
+        `endif
     } decode_out_t;
 
     typedef struct packed {
@@ -189,6 +200,9 @@ package zbp_pkg;
         logic     rd_is_rs;
 
         logic read_stall;
+        `ifdef DEBUG
+        logic [31:0] instr;
+        `endif
     } scoreboard_out_t;
 
     // REGFILE_STAGE
@@ -235,6 +249,9 @@ package zbp_pkg;
 
         logic [NUMBER_SIZE-1:0] rs1;
         logic [NUMBER_SIZE-1:0] rs2;
+        `ifdef DEBUG
+        logic [31:0] instr;
+        `endif
     } exec_in_t;
 
     typedef struct packed {
@@ -244,6 +261,10 @@ package zbp_pkg;
         swb_t wbS;
         vwb_t wbA;
         vwb_t wbB;
+
+        `ifdef DEBUG
+        logic [31:0] instr;
+        `endif
     } wb_out_t;
 
     localparam op_info_t OP_ZERO_REG = '{

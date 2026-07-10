@@ -35,13 +35,15 @@ module sync_fifo #(
     always_ff @(posedge clk) begin
         if (rst) begin
             rptr      <= '0;
-            rdata_out <= '0;
+            // rdata_out <= '0;
         end
         else if (rd_en && !empty) begin
-            rdata_out <= mem[rptr[ADDR_W-1:0]];
+            // rdata_out <= mem[rptr[ADDR_W-1:0]];
             rptr      <= rptr + 1;
         end
     end
+
+    assign rdata_out = mem[rptr[ADDR_W-1:0]];
 
     assign empty = (wptr == rptr);
 

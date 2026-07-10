@@ -16,6 +16,14 @@ module lsu
     input logic [W-1:0] imm,
     input op_info_t rd,
 
+    input logic wbS_fifo_full,
+
+    // MMIO Interface
+    pipeline_if.out mmio_req_if,
+    pipeline_if.in  mmio_rsp_if,
+    input logic     mmio_intercept,
+
+    // Dmem Interface
     pipeline_if.out dmem_req_if,
     pipeline_if.in  dmem_rsp_if,
 
@@ -28,6 +36,7 @@ module lsu
     output logic vp_sel
 );
 
+    // ============ MEM Request Decoding ============
     dmem_req_t req_p;
     logic is_load, is_store;
     dmem_size_t data_size;
@@ -79,26 +88,26 @@ module lsu
     assign req_p.data = rs2;
     assign req_p.size = data_size;
 
+    assign mmio_req_if.valid = (is_load & fifo_ready) | is_store;
+    assign mmio_req_if.data  = req_p;
+
 
     logic skid_valid, skid_ready;
     logic fifo_valid, fifo_ready;
 
-    always_comb begin
-        skid_valid = FALSE;
-        fifo_valid = FALSE;
-        mem_stall = FALSE;
+    assign skid_valid = mmio_intercept ? FALSE :
+                        is_store ? TRUE :
+                        is_load  ? fifo_ready : FALSE;
 
-        if (is_store) begin
-            skid_valid = TRUE;
-            mem_stall = ~skid_ready;
-        end
-        else if (is_load) begin
-            skid_valid = fifo_ready;
-            fifo_valid = skid_ready;
+    assign fifo_valid = is_load & (mmio_intercept ?
+        (mmio_req_if.ready & fifo_ready) :
+        (skid_ready & fifo_ready));
 
-            mem_stall = ~(skid_ready & fifo_ready);
-        end
-    end
+    assign mem_stall  = mmio_intercept ?
+        (is_store ? ~mmio_req_if.ready :
+         is_load  ? ~(fifo_ready & mmio_req_if.ready) : FALSE) :
+        (is_store ? ~skid_ready :
+         is_load  ? ~(skid_ready & fifo_ready) : FALSE);
 
     skid_buffer #(
         .DATA_W($bits(dmem_req_t))
@@ -115,6 +124,7 @@ module lsu
         .data_out (dmem_req_if.data)
     );
 
+    // =============== WB Tag tracking ===============
     wb_tag_t wb_tag;
     assign wb_tag = '{
         en: TRUE,
@@ -123,25 +133,33 @@ module lsu
     };
 
     logic [4-1:0] sfifo_full, sfifo_empty;
-
-    logic fifo_rd_ready, fifo_rd_valid;
+    logic fifo_rd_valid, fifo_wb_pop;
     wb_tag_t fifo_wb_tag;
-    logic fifo_wb_is_v;
+    logic fifo_wb_is_v, fifo_wb_is_mmio;
+
+    logic      rsp_valid;
+    dmem_rsp_t rsp_data;
+
+    assign rsp_valid = fifo_rd_valid &
+        (fifo_wb_is_mmio ? mmio_rsp_if.valid : dmem_rsp_if.valid);
+    assign rsp_data = fifo_wb_is_mmio ? mmio_rsp_if.data : dmem_rsp_if.data;
 
     logic incoming_is_v;
-    assign incoming_is_v = (dmem_rsp_if.data.size == DMEM_V);
+    assign incoming_is_v = (rsp_data.size == DMEM_V);
 
     logic target_fifo_full;
     assign target_fifo_full = incoming_is_v & sfifo_full[fifo_wb_tag.rd[1:0]];
 
     logic push_to_sfifo;
-    assign push_to_sfifo = dmem_rsp_if.valid & fifo_rd_valid &
-        ~target_fifo_full;
+    assign push_to_sfifo = rsp_valid & fifo_rd_valid & ~target_fifo_full;
 
-    assign dmem_rsp_if.ready = push_to_sfifo;
+    assign fifo_wb_pop = (incoming_is_v ? push_to_sfifo : (~wbS_fifo_full & rsp_valid & fifo_rd_valid));
+
+    assign dmem_rsp_if.ready = fifo_wb_pop & ~fifo_wb_is_mmio;
+    assign mmio_rsp_if.ready = fifo_wb_pop &  fifo_wb_is_mmio;
 
     fifo #(
-        .DATA_W($bits(wb_tag_t) + 1),
+        .DATA_W($bits(wb_tag_t) + 2),
         .DEPTH(PENDING_REQS)
     ) wb_tag_fifo (
         .clk(clk),
@@ -149,12 +167,32 @@ module lsu
 
         .wr_valid(fifo_valid),
         .wr_ready(fifo_ready),
-        .wr_data({wb_tag, rd.is_v}),
+        .wr_data({wb_tag, rd.is_v, mmio_intercept}),
 
         .rd_valid(fifo_rd_valid),
-        .rd_ready(push_to_sfifo),
-        .rd_data({fifo_wb_tag, fifo_wb_is_v})
+        .rd_ready(fifo_wb_pop),
+        .rd_data({fifo_wb_tag, fifo_wb_is_v, fifo_wb_is_mmio})
     );
+
+    // synthesis translate_off
+
+    always_ff @(posedge clk) begin
+        if (rst) begin end
+        else if (fifo_valid & fifo_ready) begin
+            $info("Pushing to wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
+                wb_tag.en, wb_tag.tid, wb_tag.rd, rd.is_v, mmio_intercept);
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (rst) begin end
+        else if (fifo_rd_valid & fifo_wb_pop) begin
+            $info("Pulling from wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
+                fifo_wb_tag.en, fifo_wb_tag.tid, fifo_wb_tag.rd, fifo_wb_is_v, fifo_wb_is_mmio);
+        end
+    end
+
+    // synthesis translate_on
 
     typedef struct packed {
         wb_tag_t tag;
@@ -175,8 +213,8 @@ module lsu
             .clk(clk),
             .rst(rst),
 
-            .wdata_in({ fifo_wb_tag, dmem_rsp_if.data.data }),
-            .wr_en(dmem_rsp_if.valid & fifo_rd_valid &
+            .wdata_in({ fifo_wb_tag, rsp_data.data }),
+            .wr_en(push_to_sfifo &
                    incoming_is_v &
                    (fifo_wb_tag.rd[1:0] == 2'(i))),
             .full(sfifo_full[i]),
@@ -188,6 +226,8 @@ module lsu
     end
     endgenerate
 
+
+    // ============== Vector Port Selection ==============
     logic available_port;
     assign available_port = |(~port_tracker);
 
@@ -199,50 +239,54 @@ module lsu
         endcase
     end
 
+    // ============== Writeback Arbitration ==============
     always_comb begin
         wbS_out     = '{default: '0};
         wbV_out     = '{default: '0};
         sfifo_rd_en = '0;
 
-        if (dmem_rsp_if.valid & fifo_rd_valid & ~incoming_is_v) begin
+        if (fifo_wb_pop & ~incoming_is_v) begin
             wbS_out = '{
                 tag: '{
                     en: TRUE,
                     tid: fifo_wb_tag.tid,
                     rd: fifo_wb_tag.rd
                 },
-                data: dmem_rsp_if.data.data[31:0]
+                data: rsp_data.data[31:0]
             };
         end
 
         if (~sfifo_empty[0] & (available_port & ~bank_tracker[0])) begin
             sfifo_rd_en[0] = TRUE;
-            wbV_out = '{
-                tag:  sfifo_tag_out[0],
-                data: sfifo_d_out[0]
-            };
+            wbV_out = '{ tag:  sfifo_tag_out[0], data: sfifo_d_out[0] };
         end
+
         else if (~sfifo_empty[1] & (available_port & ~bank_tracker[1])) begin
             sfifo_rd_en[1] = TRUE;
-            wbV_out = '{
-                tag:  sfifo_tag_out[1],
-                data: sfifo_d_out[1]
-            };
+            wbV_out = '{ tag:  sfifo_tag_out[1], data: sfifo_d_out[1] };
         end
+
         else if (~sfifo_empty[2] & (available_port & ~bank_tracker[2])) begin
             sfifo_rd_en[2] = TRUE;
-            wbV_out = '{
-                tag:  sfifo_tag_out[2],
-                data: sfifo_d_out[2]
-            };
+            wbV_out = '{ tag:  sfifo_tag_out[2], data: sfifo_d_out[2] };
         end
+
         else if (~sfifo_empty[3] & (available_port & ~bank_tracker[3])) begin
             sfifo_rd_en[3] = TRUE;
-            wbV_out = '{
-                tag:  sfifo_tag_out[3],
-                data: sfifo_d_out[3]
-            };
+            wbV_out = '{ tag:  sfifo_tag_out[3], data: sfifo_d_out[3] };
         end
+
     end
+
+
+    // synthesis translate_off
+    property no_dmem_req_when_mmio_intercepted;
+        @(posedge clk) disable iff (rst)
+        (skid_valid & mmio_intercept) |-> FALSE
+    endproperty
+
+    assert property (no_dmem_req_when_mmio_intercepted) else
+    $error("LSU: skid_valid asserted while mmio_intercept is true, pushing false request to dmem");
+    // synthesis translate_on
 
 endmodule : lsu

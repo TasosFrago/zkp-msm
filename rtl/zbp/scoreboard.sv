@@ -5,6 +5,7 @@ module scoreboard
     input logic rst,
 
     pipeline_if.in  decode_if,
+    pipeline_if.out iss_back_to_decode_if,
     pipeline_if.out iss_if,
 
     // Writeback Interface
@@ -27,25 +28,14 @@ module scoreboard
     logic [31:0] wb_port_tracker[2];
 
     always_comb begin
-        for(int b = 0; b < 4; b++) begin
-            wb_bank_tracker_out[b] = wb_bank_tracker[b][0];
-        end
-        for(int p = 0; p < 2; p++) begin
-            wb_port_tracker_out[p] = wb_port_tracker[p][0];
-        end
+        for(int b = 0; b < 4; b++) wb_bank_tracker_out[b] = wb_bank_tracker[b][0];
+        for(int p = 0; p < 2; p++) wb_port_tracker_out[p] = wb_port_tracker[p][0];
     end
 
+    iss_back_t iss_back_data;
+
     decode_out_t dec_data;
-    assign dec_data = '{
-        tid:      decode_if.data.tid,
-        pc:       decode_if.data.pc,
-        eu_tag:   decode_if.data.eu_tag,
-        op_tag:   decode_if.data.op_tag,
-        rs1:      decode_if.data.rs1,
-        rs2:      decode_if.data.rs2,
-        rd:       decode_if.data.rd,
-        rd_is_rs: decode_if.data.rd_is_rs
-    };
+    assign dec_data = decode_if.data;
 
     op_info_t rs1, rs2, rd;
 
@@ -117,7 +107,15 @@ module scoreboard
 
     assign can_issue = decode_if.valid & operands_rdy & ~write_collision;
 
-    assign decode_if.ready = can_issue & buff_rdy;
+
+    assign iss_back_data = '{
+        issued: can_issue & buff_rdy,
+        tid:    dec_data.tid
+    };
+    assign iss_back_to_decode_if.data = iss_back_data;
+    assign iss_back_to_decode_if.valid = decode_if.valid;
+
+    assign decode_if.ready = buff_rdy;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -148,7 +146,7 @@ module scoreboard
                 s_ready_vals[SIDX_W'(REGISTERS * wbS.tid) + SIDX_W'(wbS.rd)] <= 1'b1;
             end
 
-            if (decode_if.ready) begin
+            if (decode_if.ready & can_issue) begin
 
                 if (rd.en && rd.is_v && rd.idx < VREGISTERS) begin
                     v_ready_vals[VIDX_W'(VREGISTERS * dec_data.tid) + VIDX_W'(rd.idx)] <= 1'b0;
@@ -183,6 +181,10 @@ module scoreboard
         rd:         dec_data.rd,
         rd_is_rs:   dec_data.rd_is_rs,
         read_stall: read_stall
+
+        `ifdef DEBUG
+        ,instr: dec_data.instr
+        `endif
     };
 
     skid_buffer #(
@@ -202,14 +204,12 @@ module scoreboard
 
     // synthesis translate_off
 
+    // Debug Assertions
+    /*
     property track_operands_not_rdy;
         @(posedge clk) disable iff (rst)
         decode_if.valid |-> operands_rdy;
     endproperty
-
-    property check_iss_v_rs1; @(posedge clk) disable iff (rst) (decode_if.valid & rs1.en & rs1.is_v) |-> (rs1.idx < VREGISTERS); endproperty
-    property check_iss_v_rs2; @(posedge clk) disable iff (rst) (decode_if.valid & rs2.en & rs2.is_v) |-> (rs2.idx < VREGISTERS); endproperty
-
 
     assert property (track_operands_not_rdy) else
         $info("Operands_not_RDY, TID[%0d] | RS1: rdy: %b (idx: %0d),  RS2: rdy: %b (idx: %0d)",
@@ -220,6 +220,28 @@ module scoreboard
         (rs2.en ?
         (rs2.is_v ? vget_rdy(rs2.idx, dec_data.tid) : sget_rdy(rs2.idx, dec_data.tid)) :
         1'b1), rs2.idx);
+
+    property track_writeback_of_vreg;
+        @(posedge clk) disable iff (rst) (wbA.en | wbB.en)
+    endproperty
+
+    property track_writeback_of_sreg;
+        @(posedge clk) disable iff (rst) wbS.en
+    endproperty
+
+    assert property (track_writeback_of_vreg)
+    $info("Writeback of A: TID[%0d] VREG[v%0d], B: TID[%0d] VREG[v%0d]",
+        (wbA.en ? wbA.tid : 0), (wbA.en ? wbA.rd : 0),
+        (wbB.en ? wbB.tid : 0), (wbB.en ? wbB.rd : 0));
+
+    assert property (track_writeback_of_sreg)
+    $info("Writeback of TID[%0d] SREG[x%0d]", wbS.tid, wbS.rd);
+    */
+
+
+    // Protection Assertions
+    property check_iss_v_rs1; @(posedge clk) disable iff (rst) (decode_if.valid & rs1.en & rs1.is_v) |-> (rs1.idx < VREGISTERS); endproperty
+    property check_iss_v_rs2; @(posedge clk) disable iff (rst) (decode_if.valid & rs2.en & rs2.is_v) |-> (rs2.idx < VREGISTERS); endproperty
 
     assert property (check_iss_v_rs1) else $error("SCOREBOARD: Vector rs1 out of bounds");
     assert property (check_iss_v_rs2) else $error("SCOREBOARD: Vector rs2 out of bounds");

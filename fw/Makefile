@@ -9,7 +9,7 @@ OBJDUMP = riscv64-unknown-elf-objdump
 
 # Flags
 OPTIMIZE = -O2
-CFLAGS   = -Wall -nostdlib -march=rv32imav -mabi=ilp32 $(OPTIMIZE)
+CFLAGS   = -g -Wall -nostdlib -march=rv32imav -mabi=ilp32 $(OPTIMIZE) -I$(ROOT_DIR)/fw/
 CFLAGS  += -Wl,-Map=$(BUILD_DIR)/program.map
 
 OBJFLAGS = -O verilog --verilog-data-width=4 -S
@@ -52,7 +52,7 @@ $(BUILD_DIR)/main.o: $(C_SRC)
 dump: $(DUMP)
 
 $(DUMP): $(ELF)
-	$(OBJDUMP) -d $< > $@
+	$(OBJDUMP) -dS $< > $@
 
 .PHONY: clean dump all
 

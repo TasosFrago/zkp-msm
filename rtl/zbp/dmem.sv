@@ -144,4 +144,29 @@ module dmem #(
 
     assign rsp_if.data = rsp_out;
 
+    // synthtesis translate_off
+
+    property track_req_ready;
+        @(posedge clk) disable iff (rst) req_if.ready |-> (rsp_queue.size() < MAX_PENDING_REQS)
+    endproperty
+
+    always_ff @(posedge clk) begin
+        if(rst) begin end
+        else if (~req_if.ready) begin
+            $info("DMEM: req_if is not ready. Pending requests in queue: %0d", rsp_queue.size());
+            foreach (rsp_queue[i]) begin
+                $display("  rsp_queue[%0d] -> { size: %s, delay_cnt: %0d, data: 0x%0h }",
+                      i,
+                      rsp_queue[i].size.name(),
+                      rsp_queue[i].delay_cnt,
+                      rsp_queue[i].data);
+            end
+        end
+    end
+
+    assert property (track_req_ready) else
+    $info("dmem_req_if not ready, pending requests %0d", rsp_queue.size());
+
+    // synthtesis translate_on
+
 endmodule : dmem

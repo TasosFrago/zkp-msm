@@ -5,8 +5,11 @@ module decode
     input logic clk,
     input logic rst,
 
-    pipeline_if.in fetch_if,
-    pipeline_if.out decode_if
+    pipeline_if.in  fetch_if,
+    pipeline_if.out iss_back_to_fetch_if,
+
+    pipeline_if.out decode_if,
+    pipeline_if.in  iss_back_to_decode_if
 );
 
     decode_out_t out_data;
@@ -42,6 +45,9 @@ module decode
         out_data.rs2      = OP_RS2_ZERO_REG;
         out_data.rd       = OP_ZERO_REG;
         out_data.rd_is_rs = FALSE;
+        `ifdef DEBUG
+        out_data.instr    = in_data.instr;
+        `endif
 
         case (opcode)
             OPCODE_OP: begin
@@ -308,11 +314,26 @@ module decode
 
         .valid_in(fetch_if.valid),
         .ready_in(fetch_if.ready),
-        .data_in(out_data),
+        .data_in (out_data),
 
         .valid_out(decode_if.valid),
         .ready_out(decode_if.ready),
-        .data_out(decode_if.data)
+        .data_out (decode_if.data)
+    );
+
+    skid_buffer #(
+        .DATA_W($bits(iss_back_t))
+    ) iss_back_pipe_buffer (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(iss_back_to_decode_if.valid),
+        .ready_in(iss_back_to_decode_if.ready),
+        .data_in (iss_back_to_decode_if.data),
+
+        .valid_out(iss_back_to_fetch_if.valid),
+        .ready_out(iss_back_to_fetch_if.ready),
+        .data_out (iss_back_to_fetch_if.data)
     );
 
 endmodule : decode

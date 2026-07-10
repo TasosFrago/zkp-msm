@@ -12,7 +12,9 @@ module exu
     pipeline_if.in  dmem_rsp_if,
 
     input logic [4-1:0] bank_tracker,
-    input logic [2-1:0] port_tracker
+    input logic [2-1:0] port_tracker,
+
+    output logic program_done
 );
 
     logic memory_stall;
@@ -38,7 +40,12 @@ module exu
     // SALU
     swb_t wbS_salu_out;
 
+    logic salu_fire;
     logic [31:0] alu_opa, alu_opb;
+
+    assign salu_fire = exec_if.valid
+                    & (exec_if.data.eu_tag == EU_SALU)
+                    & exec_if.data.rd.en;
 
     assign alu_opa = (exec_if.data.op_tag == OP_AUIPC) ?
         exec_if.data.pc :
@@ -52,10 +59,7 @@ module exu
         .clk(clk),
         .rst(rst),
 
-        .valid_in(exec_if.valid
-            & (exec_if.data.eu_tag == EU_SALU)
-            & exec_if.data.rd.en
-        ),
+        .valid_in(salu_fire),
         .tid(exec_if.data.tid),
         .rd(exec_if.data.rd.idx),
         .opa(alu_opa),
@@ -102,6 +106,24 @@ module exu
         .cf_redirect(cf_redirect_p)
     );
 
+    // MMIO
+    pipeline_if#(.T(dmem_req_t)) mmio_req_if();
+    pipeline_if#(.T(dmem_rsp_t)) mmio_rsp_if();
+    logic mmio_intercept;
+
+    mmio #(
+        .BASE_ADDR(32'hF0000000),
+        .GLOBAL_REGS(3)
+    ) mmio_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .mmio_req_if(mmio_req_if),
+        .intercept  (mmio_intercept),
+        .mmio_rsp_if(mmio_rsp_if),
+        .program_done(program_done)
+    );
+
     // LSU
     swb_t wbS_lsu_out;
     vwb_t wbV_lsu_out;
@@ -128,6 +150,12 @@ module exu
         .rs2(exec_if.data.rs2),
         .imm(imm_val),
         .rd(exec_if.data.rd),
+
+        .wbS_fifo_full(wb_fifo_full),
+
+        .mmio_req_if(mmio_req_if),
+        .mmio_rsp_if(mmio_rsp_if),
+        .mmio_intercept(mmio_intercept),
 
         .dmem_req_if(dmem_req_if),
         .dmem_rsp_if(dmem_rsp_if),
@@ -185,6 +213,10 @@ module exu
     always_comb begin
         wb_p = '{default: '0};
 
+        `ifdef DEBUG
+        wb_p.instr = exec_if.data.instr;
+        `endif
+
         // Scalar WB
         if (wbS_lsu_out.tag.en) begin
             wb_p.wbS = wbS_lsu_out;
@@ -198,13 +230,6 @@ module exu
         else begin
             wb_p.wbS = '{default: '0};
         end
-
-        // case (1'b1)
-        //     wbS_salu_out.tag.en: wb_p.wbS = wbS_salu_out;
-        //     wbS_cfu_out.tag.en:  wb_p.wbS = wbS_cfu_out;
-        //     wbS_lsu_out.tag.en:  wb_p.wbS = wbS_lsu_out;
-        //     default:             wb_p.wbS = '{default: '0};
-        // endcase
 
         // Vector port A WB
         case (1'b1)
