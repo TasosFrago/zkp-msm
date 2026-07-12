@@ -88,9 +88,6 @@ module lsu
     assign req_p.data = rs2;
     assign req_p.size = data_size;
 
-    assign mmio_req_if.valid = (is_load & fifo_ready) | is_store;
-    assign mmio_req_if.data  = req_p;
-
 
     logic skid_valid, skid_ready;
     logic fifo_valid, fifo_ready;
@@ -108,6 +105,9 @@ module lsu
          is_load  ? ~(fifo_ready & mmio_req_if.ready) : FALSE) :
         (is_store ? ~skid_ready :
          is_load  ? ~(skid_ready & fifo_ready) : FALSE);
+
+    assign mmio_req_if.valid = (is_load & fifo_ready) | is_store;
+    assign mmio_req_if.data  = req_p;
 
     skid_buffer #(
         .DATA_W($bits(dmem_req_t))
@@ -174,25 +174,6 @@ module lsu
         .rd_data({fifo_wb_tag, fifo_wb_is_v, fifo_wb_is_mmio})
     );
 
-    // synthesis translate_off
-
-    always_ff @(posedge clk) begin
-        if (rst) begin end
-        else if (fifo_valid & fifo_ready) begin
-            $info("Pushing to wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
-                wb_tag.en, wb_tag.tid, wb_tag.rd, rd.is_v, mmio_intercept);
-        end
-    end
-
-    always_ff @(posedge clk) begin
-        if (rst) begin end
-        else if (fifo_rd_valid & fifo_wb_pop) begin
-            $info("Pulling from wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
-                fifo_wb_tag.en, fifo_wb_tag.tid, fifo_wb_tag.rd, fifo_wb_is_v, fifo_wb_is_mmio);
-        end
-    end
-
-    // synthesis translate_on
 
     typedef struct packed {
         wb_tag_t tag;
@@ -280,6 +261,22 @@ module lsu
 
 
     // synthesis translate_off
+    always_ff @(posedge clk) begin
+        if (rst) begin end
+        else if (fifo_valid & fifo_ready & (wb_tag.tid == 4 || wb_tag.tid == 5) & (wb_tag.rd == 13)) begin
+            $info("Pushing to wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
+                wb_tag.en, wb_tag.tid, wb_tag.rd, rd.is_v, mmio_intercept);
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (rst) begin end
+        else if (fifo_rd_valid & fifo_wb_pop & (fifo_wb_tag.tid == 4 || fifo_wb_tag.tid == 5) & (fifo_wb_tag.rd == 13)) begin
+            $info("Pulling from wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
+                fifo_wb_tag.en, fifo_wb_tag.tid, fifo_wb_tag.rd, fifo_wb_is_v, fifo_wb_is_mmio);
+        end
+    end
+
     property no_dmem_req_when_mmio_intercepted;
         @(posedge clk) disable iff (rst)
         (skid_valid & mmio_intercept) |-> FALSE

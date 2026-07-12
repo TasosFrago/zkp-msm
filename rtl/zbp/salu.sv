@@ -4,15 +4,18 @@ module salu
     input logic clk,
     input logic rst,
 
-    input logic               valid_in,
-    input logic [  TID_W-1:0] tid,
-    input logic [R_IDX_W-1:0] rd,
+    input  logic               valid_in,
+    output logic               ready_in,
+    input  logic [  TID_W-1:0] tid,
+    input  logic [R_IDX_W-1:0] rd,
+    input op_tag_t op_tag,
 
     input  logic [W-1:0] opa,
     input  logic [W-1:0] opb,
-    output swb_t         res,
 
-    input op_tag_t op_tag
+    output logic valid_out,
+    input  logic ready_out,
+    output swb_t res
 );
 
     logic [W-1:0] res_out;
@@ -48,20 +51,25 @@ module salu
         endcase
     end
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            res <= '{default: '0};
-        end
-        else begin
-            res <= '{
-                tag: '{
-                    en:  valid_in,
-                    tid: tid,
-                    rd:  rd
-                },
-                data: res_out
-            };
-        end
-    end
+    swb_t res_comb;
+    assign res_comb = '{
+        tag:  '{en: valid_in, tid: tid, rd: rd},
+        data: res_out
+    };
+
+    skid_buffer #(
+        .DATA_W($bits(swb_t))
+    ) salu_out_buff (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(valid_in),
+        .ready_in(ready_in),
+        .data_in (res_comb),
+
+        .valid_out(valid_out),
+        .ready_out(ready_out),
+        .data_out (res)
+    );
 
 endmodule : salu

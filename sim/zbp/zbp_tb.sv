@@ -10,11 +10,12 @@ module zbp_tb;
     tb_top dut(.*);
 
     int cycles = 0;
+    always #5ns clk = ~clk;
 
     initial begin
         // $dumpfile("dump.vcd");
         // $dumpvars(0, dut);
-        forever #5ns clk = ~clk;
+        // forever #5ns clk = ~clk;
 
         $timeformat(-9, 0, " ns", 6);
         $display("Starting simulation...\n");

@@ -16,16 +16,18 @@ TOP_MOD   := tb_top
 # Source Files
 # ==============================================================================
 HDL_SRCS  := $(RTL_DIR)/zbp/zbp_pkg.sv
+HDL_SRCS  += $(SIM_DIR)/dbg_pkg.sv
+HDL_SRCS  += $(SIM_DIR)/dbg_fetch_trace_if.sv
 HDL_SRCS  += $(SIM_DIR)/tb_top.sv
 HDL_SRCS  += $(filter-out $(RTL_DIR)/zbp/zbp_pkg.sv, $(wildcard $(RTL_DIR)/zbp/*.sv))
 
-TB_SRC    := $(SIM_DIR)/zbp_core_tb.cpp
+TB_SRC    := $(SIM_DIR)/zbp_core_tb.cpp $(SIM_DIR)/disasm.cpp
 
 # ==============================================================================
 # Compiler & Verilator Flags
 # ==============================================================================
 V_CXXFLAGS := -std=c++23 -Wall
-V_LDFLAGS :=
+V_LDFLAGS := -lcapstone
 
 ifeq ($(DEBUG), 1)
 V_CXXFLAGS += -ggdb -fsanitize=address -fno-omit-frame-pointer -O0
@@ -36,7 +38,7 @@ V_CXXFLAGS += -O3 -DNDEBUG
 $(info [INFO]: SIM Debug mode OFF)
 endif
 
-V_FLAGS := --cc --exe --build -j $(shell nproc)
+V_FLAGS := --cc --exe --build --timing -j $(shell nproc)
 V_FLAGS += --trace-fst --trace-structs --trace-max-array 128
 V_FLAGS += --Mdir $(abspath $(BUILD_DIR))
 V_FLAGS += --top-module $(TOP_MOD)
@@ -73,7 +75,8 @@ $(BUILD_DIR)/V$(TOP_MOD): $(HDL_SRCS) $(TB_SRC)
 # 'run' depends on BOTH the compiled hardware AND the compiled firmware
 run: sim $(FW_TARGET)
 	@echo -e "\n\033[0;32m[SIM] Running $(TOP_MOD) testbench...\033[0m"
-	@cd $(BUILD_DIR) && ./V$(TOP_MOD) +MEM_FILE=$(abspath $(FW_TARGET))
+	@mkdir -p $(BUILD_DIR)/traces
+	@cd $(BUILD_DIR) && exec ./V$(TOP_MOD) +MEM_FILE=$(abspath $(FW_TARGET))
 	@echo -e "\n\033[0;36m[SIM] Checking Register Dump (First 16 lines):\033[0m"
 	@head -n 16 $(BUILD_DIR)/scalar_regs_dump.txt || true
 

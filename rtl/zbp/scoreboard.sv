@@ -205,7 +205,6 @@ module scoreboard
     // synthesis translate_off
 
     // Debug Assertions
-    /*
     property track_operands_not_rdy;
         @(posedge clk) disable iff (rst)
         decode_if.valid |-> operands_rdy;
@@ -225,18 +224,17 @@ module scoreboard
         @(posedge clk) disable iff (rst) (wbA.en | wbB.en)
     endproperty
 
-    property track_writeback_of_sreg;
-        @(posedge clk) disable iff (rst) wbS.en
-    endproperty
-
     assert property (track_writeback_of_vreg)
     $info("Writeback of A: TID[%0d] VREG[v%0d], B: TID[%0d] VREG[v%0d]",
         (wbA.en ? wbA.tid : 0), (wbA.en ? wbA.rd : 0),
         (wbB.en ? wbB.tid : 0), (wbB.en ? wbB.rd : 0));
 
+    property track_writeback_of_sreg;
+        @(posedge clk) disable iff (rst) (wbS.en && (wbS.tid == 4 || wbS.tid == 5) && (wbS.rd != 0))
+    endproperty
+
     assert property (track_writeback_of_sreg)
     $info("Writeback of TID[%0d] SREG[x%0d]", wbS.tid, wbS.rd);
-    */
 
 
     // Protection Assertions

@@ -19,8 +19,12 @@ module exu
 
     logic memory_stall;
     logic wb_fifo_full;
+    logic salu_ready, salu_can_output;
+    logic cfu_ready;
 
-    assign exec_if.ready = ~memory_stall & ~wb_fifo_full;
+    assign exec_if.ready = ~memory_stall & ~wb_fifo_full &
+        (((exec_if.data.eu_tag == EU_SALU) ? salu_ready :
+          (exec_if.data.eu_tag == EU_CF) ? cfu_ready : TRUE));
 
     logic [31:0] imm_val;
     always_comb begin
@@ -40,12 +44,15 @@ module exu
     // SALU
     swb_t wbS_salu_out;
 
-    logic salu_fire;
-    logic [31:0] alu_opa, alu_opb;
+    logic salu_fired, salu_valid_in, salu_valid_out;
 
-    assign salu_fire = exec_if.valid
+    assign salu_valid_in = exec_if.valid
                     & (exec_if.data.eu_tag == EU_SALU)
                     & exec_if.data.rd.en;
+
+    assign salu_fired = salu_valid_in & salu_ready;
+
+    logic [31:0] alu_opa, alu_opb;
 
     assign alu_opa = (exec_if.data.op_tag == OP_AUIPC) ?
         exec_if.data.pc :
@@ -59,40 +66,42 @@ module exu
         .clk(clk),
         .rst(rst),
 
-        .valid_in(salu_fire),
+        .valid_in(salu_valid_in),
+        .ready_in(salu_ready),
         .tid(exec_if.data.tid),
         .rd(exec_if.data.rd.idx),
+        .op_tag(exec_if.data.op_tag),
         .opa(alu_opa),
         .opb(alu_opb),
-        .res(wbS_salu_out),
-        .op_tag(exec_if.data.op_tag)
+
+        .valid_out(salu_valid_out),
+        .ready_out(salu_can_output),
+        .res(wbS_salu_out)
     );
 
-    // CFU
+    // =========== CFU ===========
+    pipeline_if#(.T(logic [($bits(cf_redirect_t) + $bits(swb_t))-1:0])) cfu_out_if();
+
     swb_t wbS_cfu_out;
     cf_redirect_t cf_redirect_p;
     cf_pc_adv_t   cf_pc_adv;
 
-    logic cfu_fire;
-    assign cfu_fire = exec_if.valid & (exec_if.data.eu_tag == EU_CF);
+    logic cfu_branch_taken;
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            cf_pc_adv <= '{default: '0};
-        end
-        else begin
-            cf_pc_adv <= '{
-                vld: (exec_if.valid & exec_if.ready),
-                tid: exec_if.data.tid
-            };
-        end
-    end
+    logic cfu_fired, cfu_valid_in;
+    assign cfu_valid_in = exec_if.valid & (exec_if.data.eu_tag == EU_CF);
+
+    assign cfu_fired = cfu_valid_in & cfu_ready;
+
+    assign {wbS_cfu_out, cf_redirect_p} =
+        cfu_out_if.valid ? cfu_out_if.data : '0;
 
     cfu cfu_inst(
         .clk(clk),
         .rst(rst),
 
-        .valid_in(cfu_fire),
+        .valid_in(cfu_valid_in),
+        .ready_in(cfu_ready),
         .tid(exec_if.data.tid),
         .pc(exec_if.data.pc),
         .rd(exec_if.data.rd.idx),
@@ -102,8 +111,8 @@ module exu
         .imm(imm_val),
         .op_tag(exec_if.data.op_tag),
 
-        .res(wbS_cfu_out),
-        .cf_redirect(cf_redirect_p)
+        .branch_taken(cfu_branch_taken),
+        .cfu_out_if(cfu_out_if)
     );
 
     // MMIO
@@ -169,27 +178,60 @@ module exu
         .vp_sel(lsu_vport_sel)
     );
 
-    // Writeback FIFO for scalars
+
+    // ========= Advance PC =========
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            cf_pc_adv <= '{default: '0};
+        end
+        else if (exec_if.valid & exec_if.ready) begin
+            cf_pc_adv <= '{
+                vld: ~(cfu_valid_in & cfu_branch_taken),
+                tid: exec_if.data.tid
+            };
+        end
+        else begin
+            cf_pc_adv <= '{default: '0};
+        end
+    end
+    // synthesis translate_off
+    property scalar_units_dont_fire_together;
+        @(posedge clk) disable iff (rst)
+        ~(salu_fired & cfu_fired)
+    endproperty
+
+    assert property (scalar_units_dont_fire_together) else
+    $error("Scalar units fired together.");
+    // synthesis translate_on
+
+    // ========= Writeback FIFO for scalars =========
     logic wb_fifo_push, wb_fifo_pop;
     logic wb_fifo_empty;
-    logic wb_incoming_d;
 
     swb_t wb_fifo_din;
     swb_t wb_fifo_dout;
 
-    assign wb_incoming_d =
-        wbS_salu_out.tag.en |
-        wbS_cfu_out.tag.en;
+    logic salu_has_wb, cfu_has_wb;
+    assign salu_has_wb = salu_valid_out & wbS_salu_out.tag.en;
+    assign cfu_has_wb  = cfu_out_if.valid & wbS_cfu_out.tag.en;
+
+    // Incoming wb data from scalar units
+    logic wb_incoming_d;
+    assign wb_incoming_d = salu_has_wb | cfu_has_wb;
+
+    // CFU & SALU Ready_out signals
+    assign salu_can_output = ~salu_has_wb | ~wb_fifo_full;
+    assign cfu_out_if.ready = ~cfu_has_wb | (~salu_has_wb & ~wb_fifo_full);
+
+    assign wb_fifo_din =
+        salu_has_wb ?
+            wbS_salu_out :
+        cfu_has_wb ?
+            wbS_cfu_out :
+            '0;
 
     assign wb_fifo_push = wb_incoming_d & (wbS_lsu_out.tag.en | ~wb_fifo_empty) & ~wb_fifo_full;
     assign wb_fifo_pop =  ~wbS_lsu_out.tag.en & ~wb_fifo_empty;
-
-    assign wb_fifo_din =
-        wbS_salu_out.tag.en ?
-            wbS_salu_out :
-        wbS_cfu_out.tag.en ?
-            wbS_cfu_out :
-            '0;
 
     sync_fifo #(
         .DATA_W($bits(swb_t)),

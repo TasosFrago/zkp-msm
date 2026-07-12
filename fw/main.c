@@ -1,6 +1,6 @@
 #include "zbp_intrinsics.h"
 
-#define ITERATIONS 64
+#define ITERATIONS 5000
 
 static vu32 results[NUM_THREADS];
 static vu32 pass_flags[NUM_THREADS];
@@ -8,6 +8,37 @@ static vu32 scratch[NUM_THREADS][4];
 
 int main()
 {
+	i32 tid = get_tid();
+
+	u32 state = 0x811C9DC5U ^ ((u32)tid * 0x01000193U);
+	u32 acc = 0;
+
+	scratch[tid][0] = (u32)tid;
+	scratch[tid][1] = (u32)(tid + 1);
+	scratch[tid][2] = (u32)(tid + 2);
+	scratch[tid][3] = (u32)(tid + 3);
+
+	for(i32 i = 0; i < ITERATIONS; i++) {
+		state ^= state << 13;
+		state ^= state >> 17;
+		state ^= state << 5;
+
+		state = state * 1664525U + 1013904223U;
+
+		u32 read_idx = (i + 2) & 3;
+		u32 write_idx = i & 3;
+
+		u32 mix = scratch[tid][read_idx];
+		scratch[tid][write_idx] = state ^ mix;
+
+		acc += (state ^ scratch[tid][write_idx]);
+
+		*MMIO_NPRIME = acc;
+	}
+	results[tid] = acc;
+	pass_flags[tid] = 1;
+
+	/*
 	i32 tid = get_tid();
 
 	u32 acc = (u32)tid;
@@ -37,6 +68,7 @@ int main()
 
 	results[tid] = acc;
 	pass_flags[tid] = 1;
+	*/
 
 	return 0;
 }

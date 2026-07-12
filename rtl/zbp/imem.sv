@@ -60,7 +60,7 @@ module imem #(
                 end
                 else begin
                     stage_rsp.instr <= NOOP_INSTR;
-                    $display("IMEM WARNING: Fetch out of bounds at tid=%d, PC=%0h", req.tid, req.pc);
+                    $warning("IMEM WARNING: Fetch out of bounds at tid=%d, PC=%0h", req.tid, req.pc);
                 end
             end
 

@@ -48,12 +48,12 @@ module fetch
                 tid_ptr <= (tid_ptr == TID_W'(MAX_THREADS-1)) ? '0 : tid_ptr + 1'b1;
             end
 
-            // if (iss_back_if.valid & ~iss_back_d.issued) begin
-            //     busy_tb[iss_back_d.tid] <= FALSE;
-            // end
+            if (iss_back_if.valid & ~iss_back_d.issued) begin
+                busy_tb[iss_back_d.tid] <= FALSE;
+            end
 
-            if (cf_pc_adv.vld)   busy_tb[cf_pc_adv.tid] <= 1'b0;
-            if (cf_redirect.vld) busy_tb[cf_redirect.tid] <= 1'b0;
+            if (cf_pc_adv.vld)   busy_tb[cf_pc_adv.tid] <= FALSE;
+            if (cf_redirect.vld) busy_tb[cf_redirect.tid] <= FALSE;
         end
     end
 

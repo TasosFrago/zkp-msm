@@ -1,5 +1,7 @@
 module dmem #(
     parameter string INIT_FILE = "",
+    parameter string OUTPUT_FILE = "",
+    parameter string OUTPUT_HEX_FILE = "",
     parameter int MEM_SIZE_BYTES = 65536,
     parameter int MIN_LATENCY = 1,
     parameter int MAX_RANDOM_DELAY = 5,
@@ -22,6 +24,33 @@ module dmem #(
             $readmemh(INIT_FILE, mem);
             $display("DMEM: Loaded %s", INIT_FILE);
         end
+    end
+
+    function automatic void dump_dmem(input string filename);
+        int fd;
+        fd = $fopen(OUTPUT_FILE, "w");
+
+        if (fd != 0) begin
+            $display("DMEM: Dumping dmem to %s...", OUTPUT_FILE);
+
+            $fdisplay(fd, "Address       Hex Data      Unsigned Dec");
+            $fdisplay(fd, "----------------------------------------");
+
+            for(int i = 0; i < (MEM_SIZE_BYTES / 4); i++) begin
+                $fdisplay(fd, "0x%08X    0x%08X    %10d", i * 4, mem[i], mem[i]);
+            end
+
+            $fclose(fd);
+            $display("DMEM: Memory dump complete");
+        end
+        else begin
+            $warning("DMEM: Failed to open file %s", OUTPUT_FILE);
+        end
+    endfunction : dump_dmem
+
+    final begin
+        if (OUTPUT_FILE != "") dump_dmem(OUTPUT_FILE);
+        if (OUTPUT_HEX_FILE != "") $writememh(OUTPUT_HEX_FILE, mem);
     end
 
     import zbp_pkg::dmem_size_t;
@@ -146,26 +175,30 @@ module dmem #(
 
     // synthtesis translate_off
 
-    property track_req_ready;
-        @(posedge clk) disable iff (rst) req_if.ready |-> (rsp_queue.size() < MAX_PENDING_REQS)
-    endproperty
+    // property track_req_ready;
+    //     @(posedge clk) disable iff (rst) req_if.ready |-> (rsp_queue.size() < MAX_PENDING_REQS)
+    // endproperty
+    //
+    // assert property (track_req_ready) else
+    // $info("dmem_req_if not ready, pending requests %0d", rsp_queue.size());
 
+    /*
     always_ff @(posedge clk) begin
         if(rst) begin end
-        else if (~req_if.ready) begin
-            $info("DMEM: req_if is not ready. Pending requests in queue: %0d", rsp_queue.size());
+        else if (~req_if.ready & (rsp_queue.size() > 0)) begin
+            automatic string buff = $sformatf("DMEM: req_if is not ready. Pending requests in queue: %0d\n", rsp_queue.size());
+
             foreach (rsp_queue[i]) begin
-                $display("  rsp_queue[%0d] -> { size: %s, delay_cnt: %0d, data: 0x%0h }",
+                buff = {buff, $sformatf("  rsp_queue[%0d] -> { size: %s, delay_cnt: %0d, data: 0x%0h }\n",
                       i,
                       rsp_queue[i].size.name(),
                       rsp_queue[i].delay_cnt,
-                      rsp_queue[i].data);
+                      rsp_queue[i].data)};
             end
+            $info("%s", buff);
         end
     end
-
-    assert property (track_req_ready) else
-    $info("dmem_req_if not ready, pending requests %0d", rsp_queue.size());
+    */
 
     // synthtesis translate_on
 

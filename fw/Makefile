@@ -6,6 +6,7 @@ BUILD_DIR := $(ROOT_DIR)/build/fw
 CC      = riscv64-unknown-elf-gcc
 OBJCPY  = riscv64-unknown-elf-objcopy
 OBJDUMP = riscv64-unknown-elf-objdump
+MAP     = riscv64-unknown-elf-nm
 
 # Flags
 OPTIMIZE = -O2
@@ -50,6 +51,9 @@ $(BUILD_DIR)/main.o: $(C_SRC)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 dump: $(DUMP)
+
+map: $(ELF)
+	$(MAP) $(ELF)
 
 $(DUMP): $(ELF)
 	$(OBJDUMP) -dS $< > $@

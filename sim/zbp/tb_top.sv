@@ -9,6 +9,7 @@ module tb_top(
     import zbp_pkg::imem_rsp_t;
     import zbp_pkg::dmem_req_t;
     import zbp_pkg::dmem_rsp_t;
+    import dbg_pkg::*;
 
     pipeline_if#(.T(imem_req_t)) imem_req_if();
     pipeline_if#(.T(imem_rsp_t)) imem_rsp_if();
@@ -30,6 +31,8 @@ module tb_top(
 
     dmem #(
         .INIT_FILE(""),
+        .OUTPUT_FILE("dmem_dump.txt"),
+        .OUTPUT_HEX_FILE("dmem_dump.hex"),
         .MEM_SIZE_BYTES(65536),
         .MIN_LATENCY(1),
         .MAX_RANDOM_DELAY(5),
@@ -56,47 +59,46 @@ module tb_top(
         .program_done(program_done)
     );
 
+    bind fetch dbg_fetch_trace_if trace_if (
+        .clk(clk),
+        .rst(rst),
+        .fetch_valid(fetch_if.valid),
+        .fetch_ready(fetch_if.ready),
+        .fetch_instr(fetch_if.data.instr),
+        .fetch_tid(fetch_if.data.tid),
+        .cf_redirect(cf_redirect),
+        .cf_pc_adv(cf_pc_adv),
+        .pc_tb(pc_tb)
+    );
 
-    function void dump_sregs(input string filename);
-        int fd;
-        int idx;
-        static string abi_names[32] = '{
-            "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
-            "s0",   "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-            "a6",   "a7", "s2", "s3", "s4", "s5", "s6", "s7",
-            "s8",   "s9", "s10","s11","t3", "t4", "t5", "t6"
-        };
 
-        fd = $fopen(filename, "w");
+    FetchMonitor instr_monitor;
+    PcHeartbeatMonitor heartbeatPC_mon;
 
-        if (fd != 0) begin
-            for (int t = 0; t < 32; t++) begin
-                $fdisplay(fd, "========================================");
-                $fdisplay(fd, "             THREAD ID: %0d             ", t);
-                $fdisplay(fd, "========================================");
+    initial begin
+        instr_monitor = new(cpu_core_inst.fetch_inst.trace_if, "traces");
+        heartbeatPC_mon = new(cpu_core_inst.fetch_inst.trace_if, 100000);
 
-                for (int i = 0; i < 32; i++) begin
-                    idx = (32 * t) + i;
+        $display("Starting Fetch Instruction Monitor.");
+        fork
+            instr_monitor.run();
+            heartbeatPC_mon.run();
+        join_none
+    end
 
-                    $fdisplay(fd, "%-4s (x%0d)\t= 0x%08h | %0d",
-                              abi_names[i],
-                              i,
-                              ((i == 0) ? 0 : (i == 4) ? t : cpu_core_inst.regfile_inst.sregfile_inst.regs[idx]),
-                              ((i == 0) ? 0 : (i == 4) ? t : cpu_core_inst.regfile_inst.sregfile_inst.regs[idx])
-                    );
-                end
-                $fdisplay(fd, "\n");
-            end
-            $fclose(fd);
-            $display("Dump saved to scalar_regs_dump.txt");
-        end else begin
-            $error("Failed to open dump file!");
+    always_ff @(posedge clk) begin
+        if (~rst & program_done) begin
+            $display("Program DONE!");
+            $finish();
         end
-    endfunction : dump_sregs
+    end
 
     final begin
         $display("Simulation ended. Dumping Multithreaded Scalar Registers...");
-        dump_sregs("scalar_regs_dump.txt");
+        dump_sregs("scalar_regs_dump.txt", cpu_core_inst.regfile_inst.sregfile_inst.regs);
+
+        $display("Ending Fetch Instruction Monitor.");
+        if(instr_monitor != null) instr_monitor.close_files();
     end
 
 endmodule : tb_top
