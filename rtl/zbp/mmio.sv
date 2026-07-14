@@ -12,6 +12,7 @@ module mmio
     output logic intercept,
 
     pipeline_if.out mmio_rsp_if,
+    output mmio_registers_t mmio_regs_out,
     output logic program_done
 );
 
@@ -31,6 +32,11 @@ module mmio
     logic [          W-1:0] g_n_prime;
     logic [NUMBER_SIZE-1:0] g_values_space[GLOBAL_REGS];
     logic done_reg;
+
+    assign mmio_regs_out = '{
+        modulus: g_modulus,
+        n_prime: g_n_prime
+    };
 
     assign program_done = done_reg;
 

@@ -20,13 +20,15 @@ HDL_SRCS  += $(SIM_DIR)/dbg_pkg.sv
 HDL_SRCS  += $(SIM_DIR)/dbg_fetch_trace_if.sv
 HDL_SRCS  += $(SIM_DIR)/tb_top.sv
 HDL_SRCS  += $(filter-out $(RTL_DIR)/zbp/zbp_pkg.sv, $(wildcard $(RTL_DIR)/zbp/*.sv))
+HDL_SRCS  += $(wildcard $(RTL_DIR)/mm/*.sv)
+HDL_SRCS  += $(wildcard $(RTL_DIR)/adder/*.sv)
 
 TB_SRC    := $(SIM_DIR)/zbp_core_tb.cpp $(SIM_DIR)/disasm.cpp
 
 # ==============================================================================
 # Compiler & Verilator Flags
 # ==============================================================================
-V_CXXFLAGS := -std=c++23 -Wall
+V_CXXFLAGS := -std=c++23 -Wall -I$(abspath $(ROOT_DIR)/src) -I$(abspath $(ROOT_DIR)/sim/utils/)
 V_LDFLAGS := -lcapstone
 
 ifeq ($(DEBUG), 1)

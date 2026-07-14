@@ -1,7 +1,6 @@
-module mod_add #(
-    parameter int W = 16,
-    parameter int CHUNKS = 4,
-    parameter logic [(CHUNKS*W)-1:0] MODULUS
+module mod_add_var #(
+    parameter int W = 32,
+    parameter int CHUNKS = 8
 ) (
     input logic clk,
     input logic rst,
@@ -10,13 +9,25 @@ module mod_add #(
 
     input logic [CHUNKS-1:0][W-1:0] a,
     input logic [CHUNKS-1:0][W-1:0] b,
+    input logic [CHUNKS-1:0][W-1:0] modulus,
 
     output logic [CHUNKS-1:0][W-1:0] res
 );
 
+    logic [(CHUNKS*W)-1:0] mod_flat;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            mod_flat <= '0;
+        end
+        else begin
+            mod_flat <= modulus;
+        end
+    end
+
     logic [(CHUNKS*W)-1:0] MOD2;
-    assign MOD2 = {MODULUS[(CHUNKS*W)-2:0], 1'b0};
-    // assign MOD2 = MODULUS;
+    // assign MOD2 = {mod_flat[(CHUNKS*W)-2:0], 1'b0};
+    assign MOD2 = mod_flat;
 
     logic [CHUNKS:0] op_delay;
 
@@ -151,4 +162,4 @@ module mod_add #(
         end
     end
 
-endmodule : mod_add
+endmodule : mod_add_var

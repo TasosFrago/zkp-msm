@@ -50,7 +50,9 @@ module padd #(
         // end
     end
 
-    localparam type alu_tag_t = alu_metadata#(.TID_BITS($clog2(THREAD_CNT)))::tag_t;
+    // localparam type alu_tag_t = alu_metadata#(.TID_BITS($clog2(THREAD_CNT)))::tag_t;
+    // localparam type alu_tag_t = alu_metadata#($clog2(THREAD_CNT))::tag_t;
+    typedef alu_metadata#($clog2(THREAD_CNT))::tag_t alu_tag_t;
 
     logic [$clog2(THREAD_CNT)-1:0] active_tid;
     logic [THREAD_CNT-1:0] active_threads_map;
@@ -415,7 +417,8 @@ module padd #(
         .NUMBER_SIZE(NUMBER_SIZE),
         .W(W),
         .MODULUS(MODULUS),
-        .THREAD_CNT(THREAD_CNT)
+        .THREAD_CNT(THREAD_CNT),
+        .tag_t(alu_tag_t)
     ) alu_0 (
         .clk(clk),
         .rst(rst),

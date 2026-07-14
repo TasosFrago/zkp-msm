@@ -14,7 +14,11 @@ SECTIONS {
 		*(.text*)
 	} > IMEM
 
-	.data : { *(.data*) } > DMEM
+	.data : { 
+		*(.rodata*)
+		*(.sdata*)
+		*(.data*)
+	} > DMEM
 	.bss  : { *(.bss*) }  > DMEM
 
 	.mmio_section : { *(.mmio) } > MMIO

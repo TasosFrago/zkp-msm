@@ -267,6 +267,11 @@ package zbp_pkg;
         `endif
     } wb_out_t;
 
+    typedef struct packed {
+        logic [NUMBER_SIZE-1:0] modulus;
+        logic [W-1:0] n_prime;
+    } mmio_registers_t;
+
     localparam op_info_t OP_ZERO_REG = '{
         en: TRUE,
         idx: '0,

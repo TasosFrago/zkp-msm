@@ -18,7 +18,7 @@ module tb_top(
     pipeline_if#(.T(dmem_rsp_t)) dmem_rsp_if();
 
     imem #(
-        .INIT_FILE("../../fw/output.vh"),
+        .INIT_FILE("../../fw/imem.vh"),
         .MEM_SIZE_WORDS(1024),
         .RANDOM_STALLS(1'b0)
     ) imem_inst (
@@ -30,7 +30,7 @@ module tb_top(
     );
 
     dmem #(
-        .INIT_FILE(""),
+        .INIT_FILE("../../fw/dmem.vh"),
         .OUTPUT_FILE("dmem_dump.txt"),
         .OUTPUT_HEX_FILE("dmem_dump.hex"),
         .MEM_SIZE_BYTES(65536),

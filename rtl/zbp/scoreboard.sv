@@ -75,14 +75,15 @@ module scoreboard
     logic operands_rdy, read_stall, write_collision, can_issue, buff_rdy;
     logic [4:0] eu_lat, exec_lat;
 
+    localparam int LAT_CORRECTION = 1;
     always_comb begin
         // TODO: Come back and correct the latencies when finishing the exec
         // stage
         case (dec_data.eu_tag)
-            EU_VMADD: eu_lat = 'd9;
-            EU_VMMUL: eu_lat = 'd24;
-            EU_VCMP:  eu_lat = 'd2;
-            default:  eu_lat = 'd1;
+            EU_VMADD: eu_lat = 'd9  + 5'(LAT_CORRECTION);
+            EU_VMMUL: eu_lat = 'd24 + 5'(LAT_CORRECTION);
+            EU_VCMP:  eu_lat = 'd2  + 5'(LAT_CORRECTION);
+            default:  eu_lat = 'd1  + 5'(LAT_CORRECTION);
         endcase
     end
 
@@ -122,16 +123,16 @@ module scoreboard
             wb_bank_tracker <= '{default: '0};
             wb_port_tracker <= '{default: '0};
 
-            s_ready_vals <= '0;
-            v_ready_vals <= '0;
+            s_ready_vals <= '1;
+            v_ready_vals <= '1;
         end
         else begin
 
             for(int b = 0; b < 4; b++) begin
-                wb_bank_tracker[b] <= wb_bank_tracker[b] >> 1;
+                if (buff_rdy) wb_bank_tracker[b] <= wb_bank_tracker[b] >> 1;
             end
             for(int p = 0; p < 2; p++) begin
-                wb_port_tracker[p] <= wb_port_tracker[p] >> 1;
+                if (buff_rdy) wb_port_tracker[p] <= wb_port_tracker[p] >> 1;
             end
 
             if (wbA.en && wbA.rd < VREGISTERS) begin
@@ -169,6 +170,8 @@ module scoreboard
 
         end
     end
+
+    `define DEBUG
 
     scoreboard_out_t scb_out;
     assign scb_out = '{
@@ -230,7 +233,7 @@ module scoreboard
         (wbB.en ? wbB.tid : 0), (wbB.en ? wbB.rd : 0));
 
     property track_writeback_of_sreg;
-        @(posedge clk) disable iff (rst) (wbS.en && (wbS.tid == 4 || wbS.tid == 5) && (wbS.rd != 0))
+        @(posedge clk) disable iff (rst) wbS.en
     endproperty
 
     assert property (track_writeback_of_sreg)

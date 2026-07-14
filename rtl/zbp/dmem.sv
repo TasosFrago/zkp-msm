@@ -23,15 +23,28 @@ module dmem #(
         if (INIT_FILE != "") begin
             $readmemh(INIT_FILE, mem);
             $display("DMEM: Loaded %s", INIT_FILE);
+            $display("Output initial dmem state");
+            dump_dmem("init_dmem.txt");
         end
     end
 
-    function automatic void dump_dmem(input string filename);
+    export "DPI-C" function dmem_write_word;
+
+    function void dmem_write_word(input int word_addr, int data);
+        if (word_addr < (MEM_SIZE_BYTES / 4)) begin
+            mem[word_addr] = data;
+        end
+        else begin
+            $display("DPI-C DMEM Error: Tried to write out of memory bounds.");
+        end
+    endfunction : dmem_write_word
+
+    function void dump_dmem(input string filename);
         int fd;
-        fd = $fopen(OUTPUT_FILE, "w");
+        fd = $fopen(filename, "w");
 
         if (fd != 0) begin
-            $display("DMEM: Dumping dmem to %s...", OUTPUT_FILE);
+            $display("DMEM: Dumping dmem to %s...", filename);
 
             $fdisplay(fd, "Address       Hex Data      Unsigned Dec");
             $fdisplay(fd, "----------------------------------------");
@@ -44,7 +57,7 @@ module dmem #(
             $display("DMEM: Memory dump complete");
         end
         else begin
-            $warning("DMEM: Failed to open file %s", OUTPUT_FILE);
+            $warning("DMEM: Failed to open file %s", filename);
         end
     endfunction : dump_dmem
 
@@ -88,7 +101,7 @@ module dmem #(
             DMEM_B: bytes_len = 1;
             DMEM_H: bytes_len = 2;
             DMEM_W: bytes_len = 4;
-            DMEM_V: bytes_len = $bits(req.data);
+            DMEM_V: bytes_len = NUMBER_SIZE / 8;
             default: bytes_len = 4;
         endcase
     end
@@ -184,8 +197,33 @@ module dmem #(
 
     /*
     always_ff @(posedge clk) begin
+        if (!rst) begin
+            if (req_if.valid & req_if.ready & req_if.data.send_data & (req_if.data.size == DMEM_V)) begin
+                $info("Storing vector value 0x%0h to addr 0x%0h", req.data, req.addr);
+            end
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (~rst & req_if.ready & req_if.valid) begin
+            automatic string buff = $sformatf("DMEM: REQ Coming in. Pending requests in queue: %0d\n", rsp_queue.size());
+
+            foreach (rsp_queue[i]) begin
+                buff = {buff, $sformatf("  rsp_queue[%0d] -> { size: %s, delay_cnt: %0d, data: 0x%0h }\n",
+                      i,
+                      rsp_queue[i].size.name(),
+                      rsp_queue[i].delay_cnt,
+                      rsp_queue[i].data)};
+            end
+            $info("%s", buff);
+        end
+    end
+    */
+
+    /*
+    always_ff @(posedge clk) begin
         if(rst) begin end
-        else if (~req_if.ready & (rsp_queue.size() > 0)) begin
+        else if (~req_if.ready  & (rsp_queue.size() > 0)) begin
             automatic string buff = $sformatf("DMEM: req_if is not ready. Pending requests in queue: %0d\n", rsp_queue.size());
 
             foreach (rsp_queue[i]) begin

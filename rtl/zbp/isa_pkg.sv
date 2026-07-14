@@ -10,7 +10,9 @@ package isa_pkg;
         OPCODE_JALR     = 7'b1100111, // I-type jump and link reg
         OPCODE_LUI      = 7'b0110111, // U-type load upper imm
         OPCODE_AUIPC    = 7'b0010111, // U-type add upper imm to PC
-        OPCODE_SYSTEM   = 7'b1110011  // I-type system/CSRs
+        OPCODE_SYSTEM   = 7'b1110011, // I-type system/CSRs
+        OPCODE_CUSTOM_0 = 7'b0001011, //
+        OPCODE_CUSTOM_1 = 7'b0101011  //
     } opcode_t;
 
     typedef enum logic [3-1:0] {
@@ -40,6 +42,11 @@ package isa_pkg;
         F3_BYTEU = 3'h4, // LBU
         F3_HALFU = 3'h5  // LHU
     } funct3_mem_t;
+
+    typedef enum logic [3-1:0] {
+        F3_LOADV  = 3'h0,
+        F3_STOREV = 3'h1
+    } funct3_vlsu_t;
 
     typedef enum logic [7-1:0] {
         F7_BASE = 7'h00,

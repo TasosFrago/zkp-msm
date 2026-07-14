@@ -35,9 +35,57 @@ module exu
         endcase
     end
 
+    mmio_registers_t mmio_regs_out;
+
     // VMADD
+    vwb_t wbV_vmadd_out;
+    logic vmadd_valid_in, vmadd_valid_out;
+
+    assign vmadd_valid_in = exec_if.valid
+        & (exec_if.data.eu_tag == EU_VMADD)
+        & exec_if.data.rd.en;
+
+    vmadd vmadd_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(vmadd_valid_in),
+        .tid(exec_if.data.tid),
+        .rd(exec_if.data.rd.idx),
+        .op_tag(exec_if.data.op_tag),
+
+        .opa(exec_if.data.rs1),
+        .opb(exec_if.data.rs2),
+
+        .modulus(mmio_regs_out.modulus),
+
+        .valid_out(vmadd_valid_out),
+        .wbV(wbV_vmadd_out)
+    );
 
     // VMMUL
+    vwb_t wbV_vmmul_out;
+
+    logic vmmul_valid_in, vmmul_valid_out;
+
+    assign vmmul_valid_in = exec_if.valid
+            & (exec_if.data.eu_tag == EU_VMMUL)
+            & exec_if.data.rd.en;
+
+    vmmul vmmul_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(vmmul_valid_in),
+        .tid(exec_if.data.tid),
+        .rd(exec_if.data.rd.idx),
+        .opa(exec_if.data.rs1),
+        .opb(exec_if.data.rs2),
+
+        .mmio_regs(mmio_regs_out),
+        .valid_out(vmmul_valid_out),
+        .wbV(wbV_vmmul_out)
+    );
 
     // VCMP
 
@@ -130,6 +178,7 @@ module exu
         .mmio_req_if(mmio_req_if),
         .intercept  (mmio_intercept),
         .mmio_rsp_if(mmio_rsp_if),
+        .mmio_regs_out(mmio_regs_out),
         .program_done(program_done)
     );
 
@@ -252,6 +301,20 @@ module exu
     // Writeback
     wb_out_t wb_p;
 
+    typedef struct packed {
+        logic valid;
+        vwb_t data;
+    } vcand_t;
+
+    localparam int NUM_VCANDS = 3;
+    vcand_t vcands[NUM_VCANDS];
+    logic assigned_A;
+
+    assign vcands[0] = '{valid: wbV_lsu_out.tag.en, data: wbV_lsu_out};
+    assign vcands[1] = '{valid: vmmul_valid_out,    data: wbV_vmmul_out};
+    assign vcands[2] = '{valid: vmadd_valid_out,    data: wbV_vmadd_out};
+
+
     always_comb begin
         wb_p = '{default: '0};
 
@@ -273,17 +336,31 @@ module exu
             wb_p.wbS = '{default: '0};
         end
 
-        // Vector port A WB
-        case (1'b1)
-            (wbV_lsu_out.tag.en & lsu_vport_is_0): wb_p.wbA = wbV_lsu_out;
-            default:                               wb_p.wbA = '{default: '0};
-        endcase
+        assigned_A = FALSE;
+        for(int i = 0; i < NUM_VCANDS; i++) begin
+            if (vcands[i].valid) begin
+                if(~assigned_A) begin
+                    wb_p.wbA = vcands[i].data;
+                    assigned_A = TRUE;
+                end
+                else begin
+                    wb_p.wbB = vcands[i].data;
+                end
+            end
+        end
 
-        // Vector port B WB
-        case (1'b1)
-            (wbV_lsu_out.tag.en & lsu_vport_is_1): wb_p.wbB = wbV_lsu_out;
-            default:                               wb_p.wbB = '{default: '0};
-        endcase
+        // Vector port A WB
+        // case (1'b1)
+        //     (wbV_lsu_out.tag.en & lsu_vport_is_0): wb_p.wbA = wbV_lsu_out;
+        //     vmmul_valid_out:                       wb_p.wbA = wbV_vmmul_out;
+        //     default:                               wb_p.wbA = '{default: '0};
+        // endcase
+        //
+        // // Vector port B WB
+        // case (1'b1)
+        //     (wbV_lsu_out.tag.en & lsu_vport_is_1): wb_p.wbB = wbV_lsu_out;
+        //     default:                               wb_p.wbB = '{default: '0};
+        // endcase
 
         wb_p.cf_redirect_p = cf_redirect_p;
         wb_p.cf_pc_adv_p = cf_pc_adv;

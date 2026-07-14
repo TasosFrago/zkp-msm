@@ -298,6 +298,95 @@ module decode
                 out_data.op_tag = OP_NONE;
             end
 
+            OPCODE_CUSTOM_0: begin
+                out_data.rs1 = '{
+                    en:   TRUE,
+                    idx:  instr[19:15],
+                    is_v: TRUE
+                };
+
+                out_data.rd = '{
+                    en:   TRUE,
+                    idx:  instr[11:7],
+                    is_v: TRUE
+                };
+
+                out_data.rs2.is_imm        = FALSE;
+                out_data.rs2.val.as_r.idx  = instr[24:20];
+                out_data.rs2.val.as_r.is_v = TRUE;
+
+                case (funct3)
+                    F3_ADD_SUB: begin
+                        if (funct7 == F7_MUL) begin
+                            out_data.eu_tag = EU_VMMUL;
+                            out_data.op_tag = OP_VMMUL;
+                        end
+                        else begin
+                            out_data.eu_tag = EU_VMADD;
+                            out_data.op_tag = (funct7 == F7_ALT) ? OP_VMSUB : OP_VMADD;
+                        end
+                    end
+
+                    default: begin
+                        out_data.eu_tag = EU_NOOP;
+                        out_data.op_tag = OP_INVALID;
+                    end
+                endcase
+            end
+
+            OPCODE_CUSTOM_1: begin
+                case (funct3)
+
+                    F3_LOADV: begin
+                        out_data.eu_tag = EU_LSU;
+                        out_data.op_tag = OP_LV;
+
+                        out_data.rs1 = '{
+                            en:   TRUE,
+                            idx:  instr[19:15],
+                            is_v: FALSE
+                        };
+
+                        out_data.rd = '{
+                            en:   TRUE,
+                            idx:  instr[11:7],
+                            is_v: TRUE
+                        };
+
+                        out_data.rs2.is_imm          = TRUE;
+                        out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs2.val.as_imm.bits = cimm_i;
+                    end
+
+                    F3_STOREV: begin
+                        out_data.eu_tag = EU_LSU;
+                        out_data.op_tag = OP_SV;
+
+                        out_data.rs1 = '{
+                            en:   TRUE,
+                            idx:  instr[19:15],
+                            is_v: FALSE
+                        };
+
+                        out_data.rd_is_rs = TRUE;
+                        out_data.rd = '{
+                            en:   TRUE,
+                            idx:  instr[24:20],
+                            is_v: TRUE
+                        };
+
+                        out_data.rs2.is_imm          = TRUE;
+                        out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs2.val.as_imm.bits = cimm_s;
+                    end
+
+                    default: begin
+                        out_data.eu_tag = EU_NOOP;
+                        out_data.op_tag = OP_INVALID;
+                    end
+                endcase
+            end
+
             default: begin
                 out_data.eu_tag = EU_NOOP;
                 out_data.op_tag = OP_INVALID;

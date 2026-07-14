@@ -21,7 +21,8 @@ module alu
 
     localparam int CHUNKS = (NUMBER_SIZE / W),
     localparam int TID_BITS = $clog2(THREAD_CNT),
-    localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t
+    parameter type tag_t = logic
+    // localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t
 ) (
     input logic clk,
     input logic rst,
@@ -58,7 +59,8 @@ module alu
     tag_shiftreg #(
         .W(W),
         .DEPTH(MUL_LATENCY),
-        .TID_BITS(TID_BITS)
+        .TID_BITS(TID_BITS),
+        .tag_t(tag_t)
     ) mul_tags_shiftreg (
         .clk(clk),
         .rst(rst),
@@ -84,7 +86,8 @@ module alu
     tag_shiftreg #(
         .W(W),
         .DEPTH(ADD_LATENCY),
-        .TID_BITS(TID_BITS)
+        .TID_BITS(TID_BITS),
+        .tag_t(tag_t)
     ) add_tags_shiftreg (
         .clk(clk),
         .rst(rst),
@@ -104,7 +107,8 @@ module tag_shiftreg #(
     parameter int DEPTH = 24,
     parameter int TID_BITS = 5,
 
-    localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t
+    parameter type tag_t = logic
+    // localparam type tag_t = alu_metadata#(.TID_BITS(TID_BITS))::tag_t
 ) (
     input logic clk,
     input logic rst,

@@ -8,7 +8,8 @@
 #include <verilated.h>
 #include <verilated_fst_c.h>
 
-#include "Vmod_add.h"
+// #include "Vmod_add.h"
+#include "Vmod_add_var.h"
 
 #include "big_arth.hpp"
 #include "bigint.hpp"
@@ -53,7 +54,8 @@ int main(int argc, char **argv)
 	auto ctx = std::make_shared<VerilatedContext>();
 	ctx->traceEverOn(true);
 
-	auto dut = std::make_unique<Vmod_add>(ctx.get(), "dut");
+	// auto dut = std::make_unique<Vmod_add>(ctx.get(), "dut");
+	auto dut = std::make_unique<Vmod_add_var>(ctx.get(), "dut");
 
 	auto fst_deleter = [](VerilatedFstC *p) {
 		if(p) {
@@ -82,6 +84,8 @@ int main(int argc, char **argv)
 	tick();
 	dut->rst = 0;
 	tick();
+
+	vtb::to_vlwide(mod_val, dut->modulus);
 
 	const int NUM_TESTS = 10000;
 	const int PIPELINE_STAGES = CHUNKS + 1;
@@ -145,8 +149,8 @@ int main(int argc, char **argv)
 				fail_count++;
 				std::println("Mismatch at pipeline read!");
 				std::println("Op:       {}", was_sub ? "SUB" : "ADD");
-				std::println("Expected: {}", expected);
-				std::println("Got:      {}", hw_res);
+				std::println("Expected: {:x}", expected);
+				std::println("Got:      {:x}", hw_res);
 			}
 		}
 	}
@@ -155,6 +159,13 @@ int main(int argc, char **argv)
 	dut->op = 0;
 	vtb::to_vlwide(zero, dut->a);
 	vtb::to_vlwide(zero, dut->b);
+
+	int extra_ticks = (PIPELINE_STAGES - 1) - expected_queue.size();
+	if(extra_ticks > 0) {
+		for(int i = 0; i < extra_ticks; i++) {
+			tick();
+		}
+	}
 
 	while(!expected_queue.empty()) {
 		tick();
@@ -169,8 +180,8 @@ int main(int argc, char **argv)
 			fail_count++;
 			std::println("Mismatch during pipeline flush!");
 			std::println("Op:       {}", was_sub ? "SUB" : "ADD");
-			std::println("Expected: {}", expected);
-			std::println("Got:      {}", hw_res);
+			std::println("Expected: {:x}", expected);
+			std::println("Got:      {:x}", hw_res);
 		}
 	}
 
