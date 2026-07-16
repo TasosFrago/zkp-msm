@@ -261,6 +261,7 @@ module lsu
 
 
     // synthesis translate_off
+    /*
     always_ff @(posedge clk) begin
         if (rst) begin end
         else if (fifo_valid & fifo_ready & (wb_tag.tid == 4 || wb_tag.tid == 5) & (wb_tag.rd == 13)) begin
@@ -276,6 +277,7 @@ module lsu
                 fifo_wb_tag.en, fifo_wb_tag.tid, fifo_wb_tag.rd, fifo_wb_is_v, fifo_wb_is_mmio);
         end
     end
+    */
 
     property no_dmem_req_when_mmio_intercepted;
         @(posedge clk) disable iff (rst)

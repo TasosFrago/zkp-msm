@@ -316,15 +316,49 @@ module decode
                 out_data.rs2.val.as_r.is_v = TRUE;
 
                 case (funct3)
-                    F3_ADD_SUB: begin
-                        if (funct7 == F7_MUL) begin
-                            out_data.eu_tag = EU_VMMUL;
-                            out_data.op_tag = OP_VMMUL;
-                        end
-                        else begin
-                            out_data.eu_tag = EU_VMADD;
-                            out_data.op_tag = (funct7 == F7_ALT) ? OP_VMSUB : OP_VMADD;
-                        end
+                    F3_VADD_VSUB: begin
+                        case (funct7)
+                            F7_VMADD: begin
+                                out_data.eu_tag = EU_VMADD;
+                                out_data.op_tag = OP_VMADD;
+                            end
+
+                            F7_VADD: begin
+                                out_data.eu_tag = EU_VALU;
+                                out_data.op_tag = OP_INVALID;
+                            end
+
+                            F7_VMV: begin
+                                out_data.eu_tag = EU_VALU;
+                                out_data.op_tag = OP_VMV;
+                            end
+
+                            F7_VSHFL: begin
+                                out_data.eu_tag = EU_VALU;
+                                out_data.op_tag = OP_VSHFL;
+                                out_data.rs2.val.as_r.is_v = FALSE;
+                            end
+
+                            F7_VMSUB: begin
+                                out_data.eu_tag = EU_VMADD;
+                                out_data.op_tag = OP_VMSUB;
+                            end
+
+                            F7_VSUB: begin
+                                out_data.eu_tag = EU_VALU;
+                                out_data.op_tag = OP_INVALID;
+                            end
+
+                            F7_VMMUL: begin
+                                out_data.eu_tag = EU_VMMUL;
+                                out_data.op_tag = OP_VMMUL;
+                            end
+
+                            default: begin
+                                out_data.eu_tag = EU_NOOP;
+                                out_data.op_tag = OP_INVALID;
+                            end
+                        endcase
                     end
 
                     default: begin

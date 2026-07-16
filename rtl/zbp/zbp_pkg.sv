@@ -59,6 +59,7 @@ package zbp_pkg;
         EU_NOOP,
         EU_VMADD,
         EU_VMMUL,
+        EU_VALU,
         EU_VCMP,
         EU_LSU,
         EU_SALU,

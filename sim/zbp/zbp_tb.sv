@@ -1,5 +1,8 @@
-`timescale 1ns / 1ns
+`timescale 1ns / 1ps
 module zbp_tb;
+
+    import "DPI-C" context task dpi_tb_init();
+    import "DPI-C" context task dpi_tb_verify();
 
     localparam int MAX_CYCLES = 100000;
 
@@ -13,17 +16,23 @@ module zbp_tb;
     always #5ns clk = ~clk;
 
     initial begin
-        // $dumpfile("dump.vcd");
-        // $dumpvars(0, dut);
+        $dumpfile("dump.vcd");
+        $dumpvars(0, dut);
         // forever #5ns clk = ~clk;
 
         $timeformat(-9, 0, " ns", 6);
         $display("Starting simulation...\n");
-        RESET();
 
-        repeat (MAX_CYCLES) @(posedge clk);
+        RESET();
+        dpi_tb_init();
+
+        // repeat (MAX_CYCLES) @(posedge clk);
+        forever @(posedge clk);
 
         $display("Simulation Ended after %d clk cycles", cycles);
+
+        dpi_tb_verify();
+
         $finish;
     end
 
@@ -31,6 +40,9 @@ module zbp_tb;
         if (program_done) begin
             $display("PROGRAM DONE FLAG TRIGGERED");
             $display("Simulation Ended after %d clk cycles", cycles);
+
+            dpi_tb_verify();
+
             $finish;
         end
     end

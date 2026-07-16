@@ -72,20 +72,24 @@ module scoreboard
     endfunction : sget_rdy
 
 
-    logic operands_rdy, read_stall, write_collision, can_issue, buff_rdy;
+    logic operands_rdy, read_stall, vshfl_stall, write_collision, can_issue, buff_rdy;
     logic [4:0] eu_lat, exec_lat;
 
     localparam int LAT_CORRECTION = 1;
     always_comb begin
-        // TODO: Come back and correct the latencies when finishing the exec
-        // stage
         case (dec_data.eu_tag)
             EU_VMADD: eu_lat = 'd9  + 5'(LAT_CORRECTION);
             EU_VMMUL: eu_lat = 'd24 + 5'(LAT_CORRECTION);
+            EU_VALU:  eu_lat = 'd1  + 5'(LAT_CORRECTION);
             EU_VCMP:  eu_lat = 'd2  + 5'(LAT_CORRECTION);
             default:  eu_lat = 'd1  + 5'(LAT_CORRECTION);
         endcase
     end
+
+    assign vshfl_stall = (dec_data.eu_tag == EU_VALU)
+                       & (dec_data.op_tag == OP_VSHFL);
+
+    assign exec_lat = eu_lat + (read_stall ? 5'd1 : 5'd0);
 
     assign operands_rdy =
         (rs1.en ?
@@ -99,8 +103,6 @@ module scoreboard
         (rs1.en & rs2.en) & (rs1.is_v & rs2.is_v) &
         (rs1.idx[1:0] == rs2.idx[1:0]) &
         (rs1.idx < VREGISTERS && rs2.idx < VREGISTERS);
-
-    assign exec_lat = eu_lat + (read_stall ? 5'd1 : 5'd0);
 
     assign write_collision = rd.en & rd.is_v & (rd.idx < VREGISTERS) &
         (wb_bank_tracker[rd.idx[1:0]][exec_lat] |
@@ -213,6 +215,7 @@ module scoreboard
         decode_if.valid |-> operands_rdy;
     endproperty
 
+    /*
     assert property (track_operands_not_rdy) else
         $info("Operands_not_RDY, TID[%0d] | RS1: rdy: %b (idx: %0d),  RS2: rdy: %b (idx: %0d)",
         dec_data.tid,
@@ -222,22 +225,23 @@ module scoreboard
         (rs2.en ?
         (rs2.is_v ? vget_rdy(rs2.idx, dec_data.tid) : sget_rdy(rs2.idx, dec_data.tid)) :
         1'b1), rs2.idx);
+    */
 
     property track_writeback_of_vreg;
         @(posedge clk) disable iff (rst) (wbA.en | wbB.en)
     endproperty
 
-    assert property (track_writeback_of_vreg)
-    $info("Writeback of A: TID[%0d] VREG[v%0d], B: TID[%0d] VREG[v%0d]",
-        (wbA.en ? wbA.tid : 0), (wbA.en ? wbA.rd : 0),
-        (wbB.en ? wbB.tid : 0), (wbB.en ? wbB.rd : 0));
+    cover property (track_writeback_of_vreg)
+        $info("Writeback of A: TID[%0d] VREG[v%0d], B: TID[%0d] VREG[v%0d]",
+            (wbA.en ? wbA.tid : 0), (wbA.en ? wbA.rd : 0),
+            (wbB.en ? wbB.tid : 0), (wbB.en ? wbB.rd : 0));
 
     property track_writeback_of_sreg;
         @(posedge clk) disable iff (rst) wbS.en
     endproperty
 
-    assert property (track_writeback_of_sreg)
-    $info("Writeback of TID[%0d] SREG[x%0d]", wbS.tid, wbS.rd);
+    cover property (track_writeback_of_sreg)
+        $info("Writeback of TID[%0d] SREG[x%0d]", wbS.tid, wbS.rd);
 
 
     // Protection Assertions

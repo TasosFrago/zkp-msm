@@ -1066,7 +1066,7 @@ auto scalarMul(
 	return res_P.demont(curve.mont);
 }
 
-template <typename CurveT, typename PointT>
+template <typename CurveT, typename PointT, size_t WindowBits>
 	requires EllipticCurveConcept<CurveT, PointT>
 auto msm(
     const CurveT &curve,
@@ -1077,7 +1077,7 @@ auto msm(
 	using uint_t = typename bga::SelectIntType_t<CurveT::bits>::uint_t;
 	using uint_d = typename bga::SelectIntType_t<CurveT::bits>::uintd_t;
 
-	constexpr size_t c = 4;
+	constexpr size_t c = WindowBits;
 	constexpr size_t num_buckets = (1 << c) - 1;
 	constexpr size_t num_windows = (CurveT::bits + c - 1) / c;
 
@@ -1100,14 +1100,23 @@ auto msm(
 		return val & mask;
 	};
 
+	std::vector<PointT> mont_points;
+	mont_points.reserve(points.size());
+	for(const auto &p : points) {
+		mont_points.push_back(p.mont(curve.mont));
+	}
+
 	PointT result{};
 
 	for(int w = num_windows - 1; w >= 0; w--) {
 		std::vector<PointT> buckets(num_buckets + 1, PointT{});
 
-		for(size_t i = 0; i < points.size(); i++) {
+		for(size_t i = 0; i < mont_points.size(); i++) {
 			int bucket_idx = get_window_val(scalars[i], w);
-			buckets[bucket_idx] = curve.add_m(buckets[bucket_idx], points[i].mont(curve.mont));
+
+			if(bucket_idx > 0) {
+				buckets[bucket_idx] = curve.add_m(buckets[bucket_idx], mont_points[i]);
+			}
 		}
 
 		PointT acc{};
@@ -1127,6 +1136,25 @@ auto msm(
 	}
 
 	return result.demont(curve.demont);
+}
+
+template <typename CurveT, typename PointT>
+	requires EllipticCurveConcept<CurveT, PointT>
+auto msm_easy(
+    const CurveT &curve,
+    const std::vector<PointT> &points,
+    const std::vector<bga::BigInt<CurveT::bits>> &scalars)
+    -> PointT
+{
+	PointT result{};
+
+	for(size_t i = 0; i < points.size(); i++) {
+		auto multiplied_point = ecc::scalarMul(curve, points[i], scalars[i]);
+
+		result = curve.add(result, multiplied_point);
+	}
+	
+	return result;
 }
 
 } // namespace ecc

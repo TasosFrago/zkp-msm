@@ -99,42 +99,53 @@ module mod_add_var #(
     logic c0[CHUNKS];
     logic cn[CHUNKS];
 
-    generate
+generate
         for (genvar i = 0; i < CHUNKS; i++) begin : gen_adder_block
             logic [W:0] tmp_res0, tmp_res1;
             logic c0_out, cn_out;
 
-            always_comb begin
-                if (!op_delay[i]) begin : g_addition
-                    tmp_res0 = (i == 0)
-                        ? a_shifted_in[i] + b_shifted_in[i]
-                        : a_shifted_in[i] + b_shifted_in[i] + (W+1)'(c0[i-1]);
+            if (i == 0) begin : gen_first_chunk
+                always_comb begin
+                    if (!op_delay[i]) begin : g_addition
+                        tmp_res0 = a_shifted_in[i] + b_shifted_in[i];
+                        c0_out = tmp_res0[W];
+                        res0[i] = tmp_res0[W-1:0];
 
-                    c0_out = tmp_res0[W];
-                    res0[i] = tmp_res0[W-1:0];
+                        tmp_res1 = tmp_res0[W-1:0] - MOD2[W-1:0];
+                        cn_out = tmp_res1[W];
+                        res1[i] = tmp_res1[W-1:0];
+                    end
+                    else begin : g_subtraction
+                        tmp_res0 = a_shifted_in[i] - b_shifted_in[i];
+                        c0_out = tmp_res0[W];
+                        res0[i] = tmp_res0[W-1:0];
 
-                    tmp_res1 = (i == 0)
-                        ? tmp_res0[W-1:0] - MOD2[W-1:0]
-                        : tmp_res0[W-1:0] - MOD2[i*W+:W] - (W+1)'(cn[i-1]);
-
-                    cn_out = tmp_res1[W];
-                    res1[i] = tmp_res1[W-1:0];
-
+                        tmp_res1 = tmp_res0[W-1:0] + MOD2[W-1:0];
+                        cn_out = tmp_res1[W];
+                        res1[i] = tmp_res1[W-1:0];
+                    end
                 end
-                else begin : g_subtraction
-                    tmp_res0 = (i == 0)
-                        ? a_shifted_in[i] - b_shifted_in[i]
-                        : a_shifted_in[i] - b_shifted_in[i] - (W+1)'(c0[i-1]);
+            end
+            else begin : gen_other_chunks
+                always_comb begin
+                    if (!op_delay[i]) begin : g_addition
+                        tmp_res0 = a_shifted_in[i] + b_shifted_in[i] + (W+1)'(c0[i-1]);
+                        c0_out = tmp_res0[W];
+                        res0[i] = tmp_res0[W-1:0];
 
-                    c0_out = tmp_res0[W];
-                    res0[i] = tmp_res0[W-1:0];
+                        tmp_res1 = tmp_res0[W-1:0] - MOD2[i*W+:W] - (W+1)'(cn[i-1]);
+                        cn_out = tmp_res1[W];
+                        res1[i] = tmp_res1[W-1:0];
+                    end
+                    else begin : g_subtraction
+                        tmp_res0 = a_shifted_in[i] - b_shifted_in[i] - (W+1)'(c0[i-1]);
+                        c0_out = tmp_res0[W];
+                        res0[i] = tmp_res0[W-1:0];
 
-                    tmp_res1 = (i == 0)
-                        ? tmp_res0[W-1:0] + MOD2[W-1:0]
-                        : tmp_res0[W-1:0] + MOD2[i*W+:W] + (W+1)'(cn[i-1]);
-
-                    cn_out = tmp_res1[W];
-                    res1[i] = tmp_res1[W-1:0];
+                        tmp_res1 = tmp_res0[W-1:0] + MOD2[i*W+:W] + (W+1)'(cn[i-1]);
+                        cn_out = tmp_res1[W];
+                        res1[i] = tmp_res1[W-1:0];
+                    end
                 end
             end
 

@@ -29,15 +29,27 @@ module dmem #(
     end
 
     export "DPI-C" function dmem_write_word;
+    export "DPI-C" function dmem_read_word;
 
     function void dmem_write_word(input int word_addr, int data);
         if (word_addr < (MEM_SIZE_BYTES / 4)) begin
+            // $display("DMEMEMEM: Writing to addr 0x%0h val: %0h", word_addr, data);
             mem[word_addr] = data;
         end
         else begin
             $display("DPI-C DMEM Error: Tried to write out of memory bounds.");
         end
     endfunction : dmem_write_word
+
+    function int dmem_read_word(input int word_addr);
+        if (word_addr < (MEM_SIZE_BYTES / 4)) begin
+            // $display("DMEMEMEM: Reading from addr 0x%0h val: %0h", word_addr, mem[word_addr]);
+            return mem[word_addr];
+        end
+        else begin
+            $display("DPI-C DMEM Error: Tried to read out of memory bounds.");
+        end
+    endfunction : dmem_read_word
 
     function void dump_dmem(input string filename);
         int fd;
@@ -157,7 +169,10 @@ module dmem #(
 
             foreach(rsp_queue[i]) begin
                 if(rsp_queue[i].delay_cnt > 0) begin
-                    rsp_queue[i].delay_cnt--;
+                    automatic pending_rsp_t tmp = rsp_queue[i];
+                    tmp.delay_cnt--;
+                    // rsp_queue[i].delay_cnt--;
+                    rsp_queue[i] = tmp;
                 end
             end
 

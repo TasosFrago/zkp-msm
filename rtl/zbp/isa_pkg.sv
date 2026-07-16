@@ -27,6 +27,10 @@ package isa_pkg;
     } funct3_alu_t;
 
     typedef enum logic [3-1:0] {
+        F3_VADD_VSUB = 3'h0
+    } funct3_valu_t;
+
+    typedef enum logic [3-1:0] {
         F3_BEQ  = 3'h0,
         F3_BNE  = 3'h1,
         F3_BLT  = 3'h4,
@@ -53,5 +57,15 @@ package isa_pkg;
         F7_ALT  = 7'h20,
         F7_MUL  = 7'h01
     } funct7_alu_t;
+
+    typedef enum logic [7-1:0] {
+        F7_VMADD = 7'h00,
+        F7_VADD  = 7'h02,
+        F7_VMV    = 7'h03,
+        F7_VSHFL  = 7'h13,
+        F7_VMSUB = 7'h20,
+        F7_VSUB  = 7'h21,
+        F7_VMMUL = 7'h01
+    } funct7_valu_t;
 
 endpackage : isa_pkg

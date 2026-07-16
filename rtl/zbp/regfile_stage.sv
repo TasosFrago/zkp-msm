@@ -130,7 +130,7 @@ module regfile_stage
         if (rst) begin
             state <= RF_IDLE;
             valid_q <= FALSE;
-            hold <= '{eu_tag: EU_NOOP, op_tag: OP_NONE, default: '0};
+            hold <= '{eu_tag: EU_NOOP, op_tag: OP_NONE, imm: '{fmt: IMM_U, default: '0}, default: '0};
             buffered_rs1 <= '0;
         end
         else if (~stall_out) begin
