@@ -1,0 +1,3 @@
+[submodule "extern/llvm-project"]
+	path = extern/llvm-project
+	url = git@github.com:TasosFrago/llvm-project.git
