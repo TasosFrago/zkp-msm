@@ -1,4 +1,6 @@
-module tb_top(
+module tb_top #(
+    parameter int MEM_SIZE_BYTES = 65536
+) (
     input logic clk,
     input logic rst,
 
@@ -19,7 +21,7 @@ module tb_top(
 
     imem #(
         .INIT_FILE("../../fw/imem.vh"),
-        .MEM_SIZE_WORDS(1024),
+        .MEM_SIZE_WORDS(5500/4),
         .RANDOM_STALLS(1'b0)
     ) imem_inst (
         .clk(clk),
@@ -33,7 +35,7 @@ module tb_top(
         .INIT_FILE("../../fw/dmem.vh"),
         .OUTPUT_FILE("dmem_dump.txt"),
         .OUTPUT_HEX_FILE("dmem_dump.hex"),
-        .MEM_SIZE_BYTES(65536),
+        .MEM_SIZE_BYTES(MEM_SIZE_BYTES),
         .MIN_LATENCY(1),
         .MAX_RANDOM_DELAY(5),
         .RANDOM_STALL_PROB(20),
@@ -71,25 +73,101 @@ module tb_top(
         .pc_tb(pc_tb)
     );
 
+    bind zbp_core dbg_core_probe_if core_probe_inst (
+        .clk(clk),
+        .rst(rst),
 
-    FetchMonitor instr_monitor;
-    PcHeartbeatMonitor heartbeatPC_mon;
+        .imem_rsp_ready(imem_rsp_if.ready),
+        .imem_rsp_valid(imem_rsp_if.valid),
+        .imem_rsp_data_in(imem_rsp_if.data),
+
+        .pc_tb(fetch_inst.pc_tb),
+
+        .fetch_to_dec_ready(fetch_to_dec_if.ready),
+        .fetch_to_dec_valid(fetch_to_dec_if.valid),
+        .fetch_to_dec_data_in(fetch_to_dec_if.data),
+
+        .dec_to_scb_ready(dec_to_scb_if.ready),
+        .dec_to_scb_valid(dec_to_scb_if.valid),
+        .dec_to_scb_data_in(dec_to_scb_if.data),
+
+        .scb_operand1_rdy(scb_inst.operand1_rdy),
+        .scb_operand2_rdy(scb_inst.operand2_rdy),
+        .scb_read_stall(scb_inst.read_stall),
+        .scb_bshfl_stall(scb_inst.bshfl_stall),
+        .scb_can_issue(scb_inst.can_issue),
+        .scb_buff_rdy(scb_inst.buff_rdy),
+
+        .scb_to_rf_ready(scb_to_rf_if.ready),
+        .scb_to_rf_valid(scb_to_rf_if.valid),
+        .scb_to_rf_data_in(scb_to_rf_if.data),
+
+        .rf_to_exu_ready(rf_to_ex_if.ready),
+        .rf_to_exu_valid(rf_to_ex_if.valid),
+        .rf_to_exu_data_in(rf_to_ex_if.data),
+
+        .ex_bn_write_collision(exec_inst.write_collision),
+        .ex_wb_bank_tracker(exec_inst.wb_track_inst.wb_bank_tracker),
+        .ex_wb_port_tracker(exec_inst.wb_track_inst.wb_port_tracker),
+        .ex_exec_lat(exec_inst.wb_track_inst.exec_lat),
+
+        .exu_to_wb_ready(ex_to_wb_if.ready),
+        .exu_to_wb_valid(ex_to_wb_if.valid),
+        .exu_to_wb_data_in(ex_to_wb_if.data)
+    );
+
+    event sim_finish_ev;
+
+    PcHeartbeatMonitor pc_mon;
+    FetchMonitor fetch_mon;
+    DbgProbe probe;
 
     initial begin
-        instr_monitor = new(cpu_core_inst.fetch_inst.trace_if, "traces");
-        heartbeatPC_mon = new(cpu_core_inst.fetch_inst.trace_if, 100000);
+        dbg_config_t cfg;
+        cfg = dbg_get_config();
 
-        $display("Starting Fetch Instruction Monitor.");
+        $display("Starting Monitors.");
+
         fork
-            instr_monitor.run();
-            heartbeatPC_mon.run();
+            begin
+                if (cfg.pc_heartbeat_en) begin
+                    $display("PCHeartbeat ENABLED");
+                    pc_mon = new(
+                        cpu_core_inst.fetch_inst.trace_if,
+                        cfg.heartbeat_period,
+                        sim_finish_ev,
+                        cfg.stuck_threashold,
+                        'h28 // <hang> function
+                        );
+                    pc_mon.run();
+                end
+            end
+            begin
+                if (cfg.fetch_monitor_en) begin
+                    $display("FetchMonitor ENABLED");
+                    fetch_mon = new(cpu_core_inst.fetch_inst.trace_if, "traces");
+                    fetch_mon.run();
+                end
+            end
+            begin
+                if (cfg.dbg_probe_en) begin
+                    $display("DBGProbe ENABLED");
+                    probe = new(cpu_core_inst.core_probe_inst, 0,
+                                "dbg_logs");
+                    probe.run();
+                end
+            end
         join_none
+
+        @(sim_finish_ev)
+        $display("\nSimulation Finished\n");
+        $finish;
     end
 
     always_ff @(posedge clk) begin
         if (~rst & program_done) begin
             $display("Program DONE!");
-            $finish();
+            ->sim_finish_ev;
         end
     end
 
@@ -98,7 +176,8 @@ module tb_top(
         dump_sregs("scalar_regs_dump.txt", cpu_core_inst.regfile_inst.sregfile_inst.regs);
 
         $display("Ending Fetch Instruction Monitor.");
-        if(instr_monitor != null) instr_monitor.close_files();
+        if(fetch_mon != null) fetch_mon.close_files();
+        if(probe != null) probe.close_files();
     end
 
 endmodule : tb_top

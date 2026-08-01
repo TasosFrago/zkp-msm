@@ -8,6 +8,7 @@
 #include <atomic>
 #include <ranges>
 #include <random>
+#include <algorithm>
 
 #include "svdpi.h"
 #include "tests/utils/helpers.hpp"
@@ -188,6 +189,56 @@ struct DMEM_handler {
 	}
 };
 
+template <typename PointT>
+struct msm_packet {
+	bga::bgint<PointT::bits> scalar;
+	PointT point;
+};
+
+template <size_t MSM_SIZE, typename CurveT, typename PointT>
+	requires ecc::EllipticCurveConcept<CurveT, PointT>
+auto generate_msm_data(
+	std::function<std::string()> gen,
+	const CurveT &curve,
+	const PointT &G
+) -> std::optional<std::pair< std::vector<PointT>, std::vector<bga::bgint<PointT::bits>> >>
+{
+	using ScalarT = bga::bgint<PointT::bits>;
+
+	if(!curve.is_on_curve(G)) {
+		std::println("[ERROR]: Generator point is not on the curve");
+		return std::nullopt;
+	}
+
+	std::vector<PointT> points;
+	points.reserve(MSM_SIZE);
+
+	std::vector<ScalarT> scalars;
+	scalars.reserve(MSM_SIZE);
+
+	std::vector<ScalarT> used_scalars;
+	used_scalars.reserve(MSM_SIZE);
+
+	for(size_t i = 0; i < MSM_SIZE; i++) {
+		PointT point;
+		ScalarT k;
+		do {
+			do {
+				k = ScalarT(gen());
+			} while(k.is_zero() ||
+				std::find(used_scalars.begin(), used_scalars.end(), k) != used_scalars.end());
+
+			point = ecc::scalarMul<CurveT, PointT>(curve, G, k);
+		} while(!curve.is_on_curve(point));
+		used_scalars.push_back(k);
+
+		points.push_back(std::move(point));
+		scalars.push_back(ScalarT(gen()));
+	}
+
+	return std::pair{ points, scalars };
+}
+
 
 int main(int argc, char **argv)
 {
@@ -240,33 +291,65 @@ int main(int argc, char **argv)
 	tick();
 	dut->rst = 0;
 
-	// mda::Montgomery<32, mda::MONT_ALGO::FIOS> mont("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF43");
-	// mda::Montgomery<32, mda::MONT_ALGO::FIOS> mont("0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47");
+	constexpr size_t MSM_SIZE = 64;
+	constexpr size_t POINTS_STRUCT_ADDR = 0x44000;
+	constexpr size_t SCALARS_STRUCT_ADDR = POINTS_STRUCT_ADDR + 4 + (MSM_SIZE * (4 * (256/8)));
+	std::println("POINTS_STRUCT_ADDR = 0x{:X}", POINTS_STRUCT_ADDR);
+	std::println("SCALARS_STRUCT_ADDR = 0x{:X}", SCALARS_STRUCT_ADDR);
 
-	bga::bgint<32> zero("0");
-	// ecc::ShortWeierstrassCurve<32> curve(zero, zero, "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
-	ecc::ShortWeierstrassCurve<32> curve(zero, zero, "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47");
+	constexpr size_t RESULTS_ADDR = addr2line(0x10e0);
+
+	dmem_write_word(addr2line(POINTS_STRUCT_ADDR), MSM_SIZE);
+	dmem_write_word(addr2line(SCALARS_STRUCT_ADDR), MSM_SIZE);
+
+	auto fmt_point_scalar_pair = [](size_t idx, const ecc::XYZZPoint<32> &point, const bga::bgint<32> &scalar) {
+		return std::format("[{}] = {{\n\tscalar:   {:x},\n\tX:   {:x},\n\tY:   {:x},\n\tZZ:  {:x}\n\tZZZ: {:x}\n}},", idx, scalar, point.X, point.Y, point.ZZ, point.ZZZ);
+	};
+
+	// BN254
+	bga::bgint<32> a("0");
+	bga::bgint<32> b("3");
+	ecc::ShortWeierstrassCurve<32> curve(a, b, "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47");
 	auto mont = curve.mont;
 
-	ecc::XYZZPoint<32> P1(gen(), gen(), gen(), gen());
-	ecc::XYZZPoint<32> P2(gen(), gen(), gen(), gen());
+	ecc::XYZZPoint<32> G_bn254{1, 2, 1, 1};
+	
+	auto msm_test_data = generate_msm_data<MSM_SIZE>(gen, curve, G_bn254);
+	if(!msm_test_data) {
+		return 0;
+	}
+	auto&& [points, scalars] = *std::move(msm_test_data);
 
-	constexpr size_t RESULTS_ADDR = addr2line(0x180);
+	for(size_t i = 0; i < MSM_SIZE; i++) {
+		// std::println("{}", fmt_point_scalar_pair(i, points[i], scalars[i]));
+		store_point(points[i], addr2line(POINTS_STRUCT_ADDR + 4 + (i*0x80)));
+		store_u256(scalars[i], addr2line(SCALARS_STRUCT_ADDR + 4 + (i*0x20)));
+	}
+
+	auto fmtXYZZ = [](const ecc::XYZZPoint<32> &p) {
+		return std::format("[ \n\tX:   {:x},\n\tY:   {:x},\n\tZZ:  {:x},\n\tZZZ: {:x}\n]", p.X, p.Y, p.ZZ, p.ZZZ);
+	};
+
+	auto expected_res = ecc::msm<ecc::ShortWeierstrassCurve<32>, ecc::XYZZPoint<32>, 4>(curve, points, scalars);
+	// auto naive_res = ecc::msm_easy<ecc::ShortWeierstrassCurve<32>, ecc::XYZZPoint<32>>(curve, points, scalars);
+
+	// std::println("MSM Naive Result: {}", fmtXYZZ(naive_res));
+	std::println("MSM Pipenger Result: {}", fmtXYZZ(expected_res));
+	// auto match = curve.to_affine(expected_res) == curve.to_affine(naive_res);
+	// std::println("DO they match {}", (match) ? "YES" : "NO");
+	std::fflush(stdout);
+	// assert(curve.to_affine(expected_res) == curve.to_affine(naive_res));
 
 	store_u256(mont.n,   addr2line(0x40));
-	store_u256(mont.r2,  addr2line(0x0));
-	store_u256(mont.n_p, addr2line(0x60));
+	store_u256(mont.r2,  addr2line(0x60));
+	store_u256(mont.n_p, addr2line(0x80));
+	store_u256(curve.a,  addr2line(0xa0));
+	store_u256(curve.b,  addr2line(0xc0));
 
-	store_point(P1, 0x080);
-	store_point(P2, 0x100);
-
+	std::vector<ecc::XYZZPoint<32>> expected(1, expected_res);
 
 	while(!ctx->gotFinish() && !quit_requested) {
 		tick();
-
-		if(cycles % 100000 == 0) {
-			std::println("[Heartbeat]: Simulation running... CYCLE: {} ", cycles);
-		}
 	}
 
 	tfp.reset();
@@ -281,8 +364,6 @@ int main(int argc, char **argv)
 		std::fflush(stdout);
 	}
 
-	constexpr int W = 32;
-
 	std::println("");
 	std::println("Modulus = {0:x}", mont.n);
 	std::println("R2 = {0:x}, {0}", mont.r2);
@@ -291,21 +372,40 @@ int main(int argc, char **argv)
 
 	DMEM_handler dmem("dmem_dump.hex");
 
-	std::vector<ecc::XYZZPoint<32>> expected(MAX_THREADS, curve.add(P1, P2));
 	std::vector<ecc::XYZZPoint<32>> hw_res;
 
-	for(int i = 0; i < MAX_THREADS; i++) {
+	for(int i = 0; i < 1; i++) {
 		hw_res.push_back(
 			dmem.fetch_point(RESULTS_ADDR + i*32)
 				.value_or(ecc::XYZZPoint<32>()));
+	}
+
+	std::vector<ecc::AffinePoint<32>> hw_res_aff;
+	hw_res_aff.reserve(1);
+
+	for(int i = 0; i < 1; i++) {
+		hw_res_aff.push_back(curve.to_affine(hw_res[i]));
+	}
+
+	std::vector<ecc::AffinePoint<32>> exp_res_aff;
+	exp_res_aff.reserve(1);
+
+	for(int i = 0; i < 1; i++) {
+		exp_res_aff.push_back(curve.to_affine(expected[i]));
 	}
 
 	test_results(hw_res, expected,
 	      [](const ecc::XYZZPoint<32> &a, const ecc::XYZZPoint<32> &b) {
 		return (a.X == b.X) && (a.Y == b.Y) && (a.ZZ == b.ZZ) && (a.ZZZ == b.ZZZ);
 	      },
-	      [](const ecc::XYZZPoint<32> &p) {
-	      	return std::format("[ \n\tX:   {:x},\n\tY:   {:x},\n\tZZ:  {:x},\n\tZZZ: {:x}\n]", p.X, p.Y, p.ZZ, p.ZZZ);
+	      fmtXYZZ);
+
+	test_results(hw_res_aff, exp_res_aff,
+	      [](const ecc::AffinePoint<32> &a, const ecc::AffinePoint<32> &b) {
+		return a == b;
+	      },
+	      [](const ecc::AffinePoint<32> &p) {
+		return std::format("[\n\tX: {:x},\n\tY: {:x}\n ]", p.x, p.y);
 	      });
 	
 	return 0;
@@ -313,17 +413,24 @@ int main(int argc, char **argv)
 
 void store_u256(const bga::bgint<32> &data, size_t addr)
 {
+	size_t words_written = 0;
 	for(const auto [idx, chunk] : data | std::views::take(8) | std::views::enumerate) {
+		// std::println("From TB writing to addr: 0x{:x} val: {:x}", addr+idx, chunk);
 		dmem_write_word((addr + idx), chunk);
+		words_written++;
+	}
+	for(size_t i = words_written; i < 8; i++) {
+		// std::println("From TB writing to addr: 0x{:x} val: {:x}", addr+i, 0);
+		dmem_write_word((addr + i), 0);
 	}
 }
 
 void store_point(const ecc::XYZZPoint<32> &data, size_t addr)
 {
-	store_u256(data.X,   addr2line(addr + 0x00));
-	store_u256(data.Y,   addr2line(addr + 0x20));
-	store_u256(data.ZZ,  addr2line(addr + 0x40));
-	store_u256(data.ZZZ, addr2line(addr + 0x60));
+	store_u256(data.X,   addr + 0);
+	store_u256(data.Y,   addr + 8);
+	store_u256(data.ZZ,  addr + 16);
+	store_u256(data.ZZZ, addr + 24);
 }
 
 std::vector<uint32_t> expected_code(const size_t ITERATIONS, const size_t MAX_THREADS)

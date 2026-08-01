@@ -6,6 +6,7 @@ BUILD_DIR := $(ROOT_DIR)/build/sim/zbp
 RTL_DIR   := $(ROOT_DIR)/rtl
 SIM_DIR   := .
 FW_DIR    := $(ROOT_DIR)/fw
+FW_PARAMS := $(ROOT_DIR)/build/fw/fw_params.txt
 
 VERILATOR := verilator
 CXX       := clang++
@@ -28,8 +29,32 @@ TB_SRC    := $(SIM_DIR)/zbp_core_tb.cpp $(SIM_DIR)/disasm.cpp
 # ==============================================================================
 # Compiler & Verilator Flags
 # ==============================================================================
-V_CXXFLAGS := -std=c++23 -Wall -I$(abspath $(ROOT_DIR)/src) -I$(abspath $(ROOT_DIR)/sim/utils/)
-V_LDFLAGS := -lcapstone
+LLVM_CONFIG   := $(ROOT_DIR)/extern/llvm-project/build/bin/llvm-config
+LLVM_CXXFLAGS := $(filter-out -std=% -fno-exceptions -fno-rtti,$(shell $(LLVM_CONFIG) --cxxflags))
+
+LLVM_LIB_DIR := $(abspath $(ROOT_DIR)/extern/llvm-project/build/lib)
+
+LLVM_LDFLAGS := -L$(LLVM_LIB_DIR) \
+                -Wl,--start-group \
+                -lLLVMRISCVDisassembler \
+                -lLLVMRISCVDesc \
+                -lLLVMRISCVInfo \
+                -lLLVMMCDisassembler \
+                -lLLVMMC \
+                -lLLVMBinaryFormat \
+                -lLLVMDebugInfoDWARF \
+                -lLLVMDebugInfoDWARFLowLevel \
+                -lLLVMCore \
+                -lLLVMTargetParser \
+                -lLLVMSupport \
+                -lLLVMDemangle \
+                -Wl,--end-group \
+                -lz -lzstd -ltinfo
+
+V_CXXFLAGS := -std=c++23 -Wall -I$(abspath $(ROOT_DIR)/src) -I$(abspath $(ROOT_DIR)/sim/utils/) $(LLVM_CXXFLAGS)
+
+# 3. Explicitly set V_LDFLAGS to include the LLVM flags
+V_LDFLAGS  := $(LLVM_LDFLAGS)
 
 ifeq ($(DEBUG), 1)
 V_CXXFLAGS += -ggdb -fsanitize=address -fno-omit-frame-pointer -O0
@@ -52,8 +77,11 @@ V_FLAGS += -MAKEFLAGS "CXX=$(CXX) LINK=$(CXX) -s"
 # Firmware Targets
 # ==============================================================================
 FW_TARGET := $(ROOT_DIR)/build/fw/output.vh
+LIBDISASM := $(BUILD_DIR)/libdisasm.so
 
-.PHONY: all sim run clean fw compdb
+TIME_FMT := \n=== SIMULATION TIME ===\nElapsed Time : %E\nCPU Usage    : %P\nMax Memory   : %M KB\n=======================
+
+.PHONY: all sim run clean fw compdb libdisasm
 
 all: run
 
@@ -68,22 +96,40 @@ $(FW_TARGET):
 # ==============================================================================
 sim: $(BUILD_DIR)/V$(TOP_MOD)
 
-# The Verilator executable only depends on hardware files (RTL and C++)
-$(BUILD_DIR)/V$(TOP_MOD): $(HDL_SRCS) $(TB_SRC)
+$(BUILD_DIR)/V$(TOP_MOD): $(HDL_SRCS) $(TB_SRC) $(FW_TARGET)
 	@echo -e "\n\033[0;32m[VERILATOR] Building Simulation: V$(TOP_MOD)\033[0m"
 	@mkdir -p $(BUILD_DIR)
-	@CXX=$(CXX) $(VERILATOR) $(V_FLAGS) $(HDL_SRCS) $(TB_SRC)
 
-# 'run' depends on BOTH the compiled hardware AND the compiled firmware
-run: sim $(FW_TARGET)
+	@echo "FW_PARAMS = $(FW_PARAMS)"
+	@DMEM_SIZE=$$(awk -F'=' '/DMEM_SIZE_DEC/ {print $$2}' $(FW_PARAMS)); \
+	INPUTS_ADDR=$$(awk -F'=' '/INPUTS_BASE_HEX/ {print $$2}' $(FW_PARAMS)); \
+	echo -e "\033[0;36m[VERILATOR] Injecting DMEM_SIZE_BYTES=$$DMEM_SIZE \033[0m"; \
+	CXX=$(CXX) $(VERILATOR) $(V_FLAGS) \
+		-GMEM_SIZE_BYTES=$$DMEM_SIZE \
+		$(HDL_SRCS) $(TB_SRC)
+
+run: sim
 	@echo -e "\n\033[0;32m[SIM] Running $(TOP_MOD) testbench...\033[0m"
 	@mkdir -p $(BUILD_DIR)/traces
-	@cd $(BUILD_DIR) && exec ./V$(TOP_MOD) +MEM_FILE=$(abspath $(FW_TARGET))
+	@mkdir -p $(BUILD_DIR)/dbg_logs
+	@cd $(BUILD_DIR) && /usr/bin/time -f "$(TIME_FMT)" ./V$(TOP_MOD) \
+		+MEM_FILE=$(abspath $(FW_TARGET)) \
+		+NO_FETCH_TRACE
+
 	@echo -e "\n\033[0;36m[SIM] Checking Register Dump (First 16 lines):\033[0m"
 	@head -n 16 $(BUILD_DIR)/scalar_regs_dump.txt || true
 
 compdb:
 	bear --output compile_commands.json -- $(MAKE) sim --always-make
+
+libdisasm: $(LIBDISASM)
+$(LIBDISASM): $(SIM_DIR)/disasm.cpp
+	@echo -e "\n\033[0;32m[BUILD] Compiling C++ Disassembler to Shared Library: $@\033[0m"
+	@$(CXX) -shared -fPIC -std=c++23 \
+		-I$(abspath $(ROOT_DIR)/src) -I$(abspath $(ROOT_DIR)/sim/utils/) \
+		$(LLVM_CXXFLAGS) \
+		$< -o $@ \
+		$(LLVM_LDFLAGS)
 
 wave:
 	@echo "Starting surfer waveform..."
