@@ -7,12 +7,12 @@ module regfile_stage
     pipeline_if.in  iss_if,
     pipeline_if.out exec_if,
 
-    input vwb_t wbA,
-    input vwb_t wbB,
+    input bwb_t wbA,
+    input bwb_t wbB,
     input swb_t wbS
 );
 
-    typedef enum logic { RF_IDLE, RF_WAIT_RS2 } rf_state_t;
+    typedef enum logic [1:0] { RF_IDLE, RF_WAIT_RS2 /*, RF_WAIT_VSHFL*/ } rf_state_t;
     rf_state_t state;
 
     scoreboard_out_t dec_data;
@@ -22,12 +22,23 @@ module regfile_stage
     op_info_t rs1, rs2, rd;
     assign rs1 = dec_data.rs1;
 
+    // assign rs2 = (~dec_data.rs2.is_imm) ? '{
+    //         en: TRUE,
+    //         idx: dec_data.rs2.val.as_r.idx,
+    //         is_bn: dec_data.rs2.val.as_r.is_bn
+    //     } :
+    //     (dec_data.rd_is_rs) ? dec_data.rd : '0;
+    //
+    // assign rd = (~dec_data.rs2.is_imm) ? dec_data.rd :
+    //             (dec_data.rd_is_rs) ? '0 :
+    //             dec_data.rd;
+
     always_comb begin
         if (~dec_data.rs2.is_imm) begin
             rs2 = '{
-                en:   TRUE,
-                idx:  dec_data.rs2.val.as_r.idx,
-                is_v: dec_data.rs2.val.as_r.is_v
+                en:    TRUE,
+                idx:   dec_data.rs2.val.as_r.idx,
+                is_bn: dec_data.rs2.val.as_r.is_bn
             };
             rd  = dec_data.rd;
         end
@@ -55,6 +66,7 @@ module regfile_stage
         imm_t imm;
 
         logic was_stall;
+        logic was_bshfl_stall;
 
         `ifdef DEBUG
         logic [31:0] instr;
@@ -70,57 +82,61 @@ module regfile_stage
 
     assign iss_if.ready = (state == RF_IDLE) & (~valid_q | exec_if.ready);
 
-    logic [TID_W-1:0]       v_rd_tid, s_rd_tid;
+    logic [TID_W-1:0]       bn_rd_tid, s_rd_tid;
 
-    logic                   v_rd_en_A, v_rd_en_B;
-    logic [R_IDX_W-1:0]     v_rd_reg_A, v_rd_reg_B;
-    logic [NUMBER_SIZE-1:0] v_rd_data_A, v_rd_data_B;
+    logic                   bn_rd_en_A, bn_rd_en_B;
+    logic [R_IDX_W-1:0]     bn_rd_reg_A, bn_rd_reg_B;
+    logic [NUMBER_SIZE-1:0] bn_rd_data_A, bn_rd_data_B;
 
     logic               s_rd_en_A, s_rd_en_B;
     logic [R_IDX_W-1:0] s_rd_reg_A, s_rd_reg_B;
     logic [W-1:0]       s_rd_data_A, s_rd_data_B;
 
     always_comb begin
-        v_rd_en_A  = FALSE;
-        v_rd_reg_A = '0;
-        v_rd_en_B  = FALSE;
-        v_rd_reg_B = '0;
+        bn_rd_en_A  = FALSE;
+        bn_rd_reg_A = '0;
+        bn_rd_en_B  = FALSE;
+        bn_rd_reg_B = '0;
         s_rd_en_A  = FALSE;
         s_rd_reg_A = '0;
         s_rd_en_B  = FALSE;
         s_rd_reg_B = '0;
 
-        v_rd_tid = hold.tid;
+        bn_rd_tid = hold.tid;
         s_rd_tid = hold.tid;
 
         if (~stall_out) begin
             unique case (state)
                 RF_IDLE: begin
                     if (iss_if.valid & iss_if.ready) begin
-                        v_rd_tid = iss_if.data.tid;
-                        s_rd_tid = iss_if.data.tid;
+                        bn_rd_tid = iss_if.data.tid;
+                        s_rd_tid  = iss_if.data.tid;
 
                         if (iss_if.data.read_stall) begin
-                            v_rd_en_A = 1'b1;
-                            v_rd_reg_A = rs1.idx;
+                            bn_rd_en_A  = TRUE;
+                            bn_rd_reg_A = rs1.idx;
+                        end
+                        else if (iss_if.data.bshfl_stall) begin
+                            s_rd_en_B  = TRUE;
+                            s_rd_reg_B = rs2.idx;
                         end
                         else begin
-                            v_rd_en_A = rs1.en & rs1.is_v;
-                            v_rd_reg_A = rs1.idx;
-                            v_rd_en_B = rs2.en & rs2.is_v;
-                            v_rd_reg_B = rs2.idx;
+                            bn_rd_en_A  = rs1.en & rs1.is_bn;
+                            bn_rd_reg_A = rs1.idx;
+                            bn_rd_en_B  = rs2.en & rs2.is_bn;
+                            bn_rd_reg_B = rs2.idx;
 
-                            s_rd_en_A = rs1.en & ~rs1.is_v;
+                            s_rd_en_A  = rs1.en & ~rs1.is_bn;
                             s_rd_reg_A = rs1.idx;
-                            s_rd_en_B = rs2.en & ~rs2.is_v;
+                            s_rd_en_B  = rs2.en & ~rs2.is_bn;
                             s_rd_reg_B = rs2.idx;
                         end
                     end
                 end
                 RF_WAIT_RS2: begin
-                    v_rd_tid = hold.tid;
-                    v_rd_en_A = TRUE;
-                    v_rd_reg_A = hold.rs2.idx;
+                    bn_rd_tid = hold.tid;
+                    bn_rd_en_A = TRUE;
+                    bn_rd_reg_A = hold.rs2.idx;
                 end
             endcase
         end
@@ -134,9 +150,6 @@ module regfile_stage
             buffered_rs1 <= '0;
         end
         else if (~stall_out) begin
-            `ifdef DEBUG
-            hold.instr <= dec_data.instr;
-            `endif
             unique case (state)
                 RF_IDLE: begin
                     if (iss_if.valid & iss_if.ready) begin
@@ -150,6 +163,10 @@ module regfile_stage
                         hold.rs2_is_imm <= iss_if.data.rs2.is_imm;
                         hold.imm <= iss_if.data.rs2.val.as_imm;
                         hold.was_stall <= iss_if.data.read_stall;
+
+                        `ifdef DEBUG
+                        hold.instr <= dec_data.instr;
+                        `endif
 
                         if (iss_if.data.read_stall) begin
                             state <= RF_WAIT_RS2;
@@ -166,7 +183,7 @@ module regfile_stage
                 end
 
                 RF_WAIT_RS2: begin
-                    buffered_rs1 <= v_rd_data_A;
+                    buffered_rs1 <= bn_rd_data_A;
                     state <= RF_IDLE;
                     valid_q <= TRUE;
                 end
@@ -179,15 +196,15 @@ module regfile_stage
     always_comb begin
         if (hold.was_stall) begin
             rs1_val = buffered_rs1;
-            rs2_val = v_rd_data_A;
+            rs2_val = bn_rd_data_A;
         end
         else begin
             rs1_val = ~hold.rs1.en ? '0 :
-                      hold.rs1.is_v ? v_rd_data_A :
+                      hold.rs1.is_bn ? bn_rd_data_A :
                       { {(NUMBER_SIZE-W){1'b0}}, s_rd_data_A };
 
             rs2_val = ~hold.rs2.en ? '0 :
-                      hold.rs2.is_v ? v_rd_data_B :
+                      hold.rs2.is_bn ? bn_rd_data_B :
                       { {(NUMBER_SIZE-W){1'b0}}, s_rd_data_B };
         end
     end
@@ -210,7 +227,7 @@ module regfile_stage
 
     };
 
-    vregfile vregfile_inst(
+    bregfile bregfile_inst(
         .clk(clk),
         .rst(rst),
 
@@ -224,15 +241,15 @@ module regfile_stage
         .wr_tid_B(wbB.tag.tid),
         .wr_reg_B(wbB.tag.rd),
 
-        .rd_tid(v_rd_tid),
+        .rd_tid(bn_rd_tid),
 
-        .rd_data_A(v_rd_data_A),
-        .rd_en_A(v_rd_en_A),
-        .rd_reg_A(v_rd_reg_A),
+        .rd_data_A(bn_rd_data_A),
+        .rd_en_A(bn_rd_en_A),
+        .rd_reg_A(bn_rd_reg_A),
 
-        .rd_data_B(v_rd_data_B),
-        .rd_en_B(v_rd_en_B),
-        .rd_reg_B(v_rd_reg_B)
+        .rd_data_B(bn_rd_data_B),
+        .rd_en_B(bn_rd_en_B),
+        .rd_reg_B(bn_rd_reg_B)
     );
 
     sregfile sregfile_inst(

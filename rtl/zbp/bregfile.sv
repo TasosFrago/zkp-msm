@@ -1,4 +1,4 @@
-module vregfile
+module bregfile
     import zbp_pkg::*;
 (
     input logic clk,
@@ -27,7 +27,7 @@ module vregfile
     input  logic [    R_IDX_W-1:0] rd_reg_B
 );
 
-    localparam int BANK_SIZE = 32'(VREGISTERS) / 4;
+    localparam int BANK_SIZE = 32'(BREGISTERS) / 4;
 
     logic [NUMBER_SIZE-1:0] mem_bank0[MAX_THREADS * BANK_SIZE];
     logic [NUMBER_SIZE-1:0] mem_bank1[MAX_THREADS * BANK_SIZE];
@@ -101,15 +101,15 @@ module vregfile
     end
 
     // syntesis translate_off
-    property check_wr_A; @(posedge clk) disable iff (rst) wr_en_A |-> (wr_reg_A < VREGISTERS); endproperty
-    property check_wr_B; @(posedge clk) disable iff (rst) wr_en_B |-> (wr_reg_B < VREGISTERS); endproperty
-    property check_rd_A; @(posedge clk) disable iff (rst) rd_en_A |-> (rd_reg_A < VREGISTERS); endproperty
-    property check_rd_B; @(posedge clk) disable iff (rst) rd_en_B |-> (rd_reg_B < VREGISTERS); endproperty
+    property check_wr_A; @(posedge clk) disable iff (rst) wr_en_A |-> (wr_reg_A < BREGISTERS); endproperty
+    property check_wr_B; @(posedge clk) disable iff (rst) wr_en_B |-> (wr_reg_B < BREGISTERS); endproperty
+    property check_rd_A; @(posedge clk) disable iff (rst) rd_en_A |-> (rd_reg_A < BREGISTERS); endproperty
+    property check_rd_B; @(posedge clk) disable iff (rst) rd_en_B |-> (rd_reg_B < BREGISTERS); endproperty
 
-    assert property (check_wr_A) else $error("Vector Regfile: wr_reg_A out of bounds (> %0d) | Reg: %0d", VREGISTERS, wr_reg_A);
-    assert property (check_wr_B) else $error("Vector Regfile: wr_reg_B out of bounds (> %0d) | Reg: %0d", VREGISTERS, wr_reg_B);
-    assert property (check_rd_A) else $error("Vector Regfile: rd_reg_A out of bounds (> %0d) | Reg: %0d", VREGISTERS, rd_reg_A);
-    assert property (check_rd_B) else $error("Vector Regfile: rd_reg_B out of bounds (> %0d) | Reg: %0d", VREGISTERS, rd_reg_B);
+    assert property (check_wr_A) else $error("Vector Regfile: wr_reg_A out of bounds (> %0d) | Reg: %0d", BREGISTERS, wr_reg_A);
+    assert property (check_wr_B) else $error("Vector Regfile: wr_reg_B out of bounds (> %0d) | Reg: %0d", BREGISTERS, wr_reg_B);
+    assert property (check_rd_A) else $error("Vector Regfile: rd_reg_A out of bounds (> %0d) | Reg: %0d", BREGISTERS, rd_reg_A);
+    assert property (check_rd_B) else $error("Vector Regfile: rd_reg_B out of bounds (> %0d) | Reg: %0d", BREGISTERS, rd_reg_B);
     // syntesis translate_on
 
-endmodule : vregfile
+endmodule : bregfile

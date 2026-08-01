@@ -22,7 +22,7 @@ module decode
     logic [2:0] funct3;
     logic [6:0] funct7;
 
-    assign instr = in_data.instr;
+    assign instr  = in_data.instr;
     assign opcode = instr[6:0];
     assign funct3 = instr[14:12];
     assign funct7 = instr[31:25];
@@ -54,20 +54,20 @@ module decode
                 out_data.eu_tag = EU_SALU;
 
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: FALSE
                 };
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm        = FALSE;
-                out_data.rs2.val.as_r.idx  = instr[24:20];
-                out_data.rs2.val.as_r.is_v = FALSE;
+                out_data.rs2.is_imm         = FALSE;
+                out_data.rs2.val.as_r.idx   = instr[24:20];
+                out_data.rs2.val.as_r.is_bn = FALSE;
 
                 case (funct3)
                     F3_ADD_SUB: out_data.op_tag = (funct7 == F7_ALT) ? OP_SUB :
@@ -88,15 +88,15 @@ module decode
                 out_data.eu_tag = EU_SALU;
 
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: FALSE
                 };
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm      = TRUE;
@@ -137,15 +137,15 @@ module decode
                 out_data.eu_tag = EU_LSU;
 
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: FALSE
                 };
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm          = TRUE;
@@ -166,17 +166,17 @@ module decode
                 out_data.eu_tag = EU_LSU;
 
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: FALSE
                 };
 
                 // On the STORE instrs we repurpose rd to rs2 because rs2 holds imm
                 out_data.rd_is_rs = TRUE;
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[24:20],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[24:20],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm          = TRUE;
@@ -195,16 +195,16 @@ module decode
                 out_data.eu_tag = EU_CF;
 
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: FALSE
                 };
 
                 out_data.rd_is_rs = TRUE;
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[24:20],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[24:20],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm      = TRUE;
@@ -228,9 +228,9 @@ module decode
 
                 out_data.rs1.en = FALSE;
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm          = TRUE;
@@ -243,15 +243,15 @@ module decode
                 out_data.op_tag = OP_JALR;
 
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: FALSE
                 };
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm          = TRUE;
@@ -266,9 +266,9 @@ module decode
                 out_data.rs1.en = FALSE;
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm          = TRUE;
@@ -283,9 +283,9 @@ module decode
                 out_data.rs1.en = FALSE;
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: FALSE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: FALSE
                 };
 
                 out_data.rs2.is_imm          = TRUE;
@@ -300,58 +300,58 @@ module decode
 
             OPCODE_CUSTOM_0: begin
                 out_data.rs1 = '{
-                    en:   TRUE,
-                    idx:  instr[19:15],
-                    is_v: TRUE
+                    en:    TRUE,
+                    idx:   instr[19:15],
+                    is_bn: TRUE
                 };
 
                 out_data.rd = '{
-                    en:   TRUE,
-                    idx:  instr[11:7],
-                    is_v: TRUE
+                    en:    TRUE,
+                    idx:   instr[11:7],
+                    is_bn: TRUE
                 };
 
                 out_data.rs2.is_imm        = FALSE;
                 out_data.rs2.val.as_r.idx  = instr[24:20];
-                out_data.rs2.val.as_r.is_v = TRUE;
+                out_data.rs2.val.as_r.is_bn = TRUE;
 
                 case (funct3)
-                    F3_VADD_VSUB: begin
+                    F3_BADD_BSUB: begin
                         case (funct7)
-                            F7_VMADD: begin
-                                out_data.eu_tag = EU_VMADD;
-                                out_data.op_tag = OP_VMADD;
+                            F7_BASE_BMADD: begin
+                                out_data.eu_tag = EU_BMADD;
+                                out_data.op_tag = OP_BMADD;
                             end
 
-                            F7_VADD: begin
-                                out_data.eu_tag = EU_VALU;
+                            F7_BADD: begin
+                                out_data.eu_tag = EU_BALU;
                                 out_data.op_tag = OP_INVALID;
                             end
 
-                            F7_VMV: begin
-                                out_data.eu_tag = EU_VALU;
-                                out_data.op_tag = OP_VMV;
+                            F7_BMV: begin
+                                out_data.eu_tag = EU_BALU;
+                                out_data.op_tag = OP_BMV;
                             end
 
-                            F7_VSHFL: begin
-                                out_data.eu_tag = EU_VALU;
-                                out_data.op_tag = OP_VSHFL;
-                                out_data.rs2.val.as_r.is_v = FALSE;
+                            F7_BSHFL: begin
+                                out_data.eu_tag = EU_BALU;
+                                out_data.op_tag = OP_BSHFL;
+                                out_data.rs2.val.as_r.is_bn = FALSE;
                             end
 
-                            F7_VMSUB: begin
-                                out_data.eu_tag = EU_VMADD;
-                                out_data.op_tag = OP_VMSUB;
+                            F7_BMSUB: begin
+                                out_data.eu_tag = EU_BMADD;
+                                out_data.op_tag = OP_BMSUB;
                             end
 
-                            F7_VSUB: begin
-                                out_data.eu_tag = EU_VALU;
+                            F7_BSUB: begin
+                                out_data.eu_tag = EU_BALU;
                                 out_data.op_tag = OP_INVALID;
                             end
 
-                            F7_VMMUL: begin
-                                out_data.eu_tag = EU_VMMUL;
-                                out_data.op_tag = OP_VMMUL;
+                            F7_BMMUL_BSEQ: begin
+                                out_data.eu_tag = EU_BMMUL;
+                                out_data.op_tag = OP_BMMUL;
                             end
 
                             default: begin
@@ -371,20 +371,20 @@ module decode
             OPCODE_CUSTOM_1: begin
                 case (funct3)
 
-                    F3_LOADV: begin
+                    F3_LOADBN: begin
                         out_data.eu_tag = EU_LSU;
-                        out_data.op_tag = OP_LV;
+                        out_data.op_tag = OP_LBN;
 
                         out_data.rs1 = '{
-                            en:   TRUE,
-                            idx:  instr[19:15],
-                            is_v: FALSE
+                            en:    TRUE,
+                            idx:   instr[19:15],
+                            is_bn: FALSE
                         };
 
                         out_data.rd = '{
                             en:   TRUE,
                             idx:  instr[11:7],
-                            is_v: TRUE
+                            is_bn: TRUE
                         };
 
                         out_data.rs2.is_imm          = TRUE;
@@ -392,21 +392,21 @@ module decode
                         out_data.rs2.val.as_imm.bits = cimm_i;
                     end
 
-                    F3_STOREV: begin
+                    F3_STOREBN: begin
                         out_data.eu_tag = EU_LSU;
-                        out_data.op_tag = OP_SV;
+                        out_data.op_tag = OP_SBN;
 
                         out_data.rs1 = '{
-                            en:   TRUE,
-                            idx:  instr[19:15],
-                            is_v: FALSE
+                            en:    TRUE,
+                            idx:   instr[19:15],
+                            is_bn: FALSE
                         };
 
                         out_data.rd_is_rs = TRUE;
                         out_data.rd = '{
-                            en:   TRUE,
-                            idx:  instr[24:20],
-                            is_v: TRUE
+                            en:    TRUE,
+                            idx:   instr[24:20],
+                            is_bn: TRUE
                         };
 
                         out_data.rs2.is_imm          = TRUE;

@@ -32,8 +32,8 @@ module lsu
 
     output logic mem_stall,
     output swb_t wbS_out,
-    output vwb_t wbV_out,
-    output logic vp_sel
+    output bwb_t wbBN_out,
+    output logic bp_sel
 );
 
     // ============ MEM Request Decoding ============
@@ -68,11 +68,11 @@ module lsu
                     is_store = TRUE; data_size = DMEM_W;
                 end
 
-                OP_LV: begin
-                    is_load = TRUE; data_size = DMEM_V;
+                OP_LBN: begin
+                    is_load = TRUE; data_size = DMEM_BN;
                 end
-                OP_SV: begin
-                    is_store = TRUE; data_size = DMEM_V;
+                OP_SBN: begin
+                    is_store = TRUE; data_size = DMEM_BN;
                 end
                 default: begin
                     is_load = FALSE;
@@ -127,15 +127,15 @@ module lsu
     // =============== WB Tag tracking ===============
     wb_tag_t wb_tag;
     assign wb_tag = '{
-        en: TRUE,
+        en:  TRUE,
         tid: tid,
-        rd: rd.idx
+        rd:  rd.idx
     };
 
     logic [4-1:0] sfifo_full, sfifo_empty;
     logic fifo_rd_valid, fifo_wb_pop;
     wb_tag_t fifo_wb_tag;
-    logic fifo_wb_is_v, fifo_wb_is_mmio;
+    logic fifo_wb_is_bn, fifo_wb_is_mmio;
 
     logic      rsp_valid;
     dmem_rsp_t rsp_data;
@@ -144,16 +144,16 @@ module lsu
         (fifo_wb_is_mmio ? mmio_rsp_if.valid : dmem_rsp_if.valid);
     assign rsp_data = fifo_wb_is_mmio ? mmio_rsp_if.data : dmem_rsp_if.data;
 
-    logic incoming_is_v;
-    assign incoming_is_v = (rsp_data.size == DMEM_V);
+    logic incomfing_is_bn;
+    assign incomfing_is_bn = (rsp_data.size == DMEM_BN);
 
     logic target_fifo_full;
-    assign target_fifo_full = incoming_is_v & sfifo_full[fifo_wb_tag.rd[1:0]];
+    assign target_fifo_full = incomfing_is_bn & sfifo_full[fifo_wb_tag.rd[1:0]];
 
     logic push_to_sfifo;
     assign push_to_sfifo = rsp_valid & fifo_rd_valid & ~target_fifo_full;
 
-    assign fifo_wb_pop = (incoming_is_v ? push_to_sfifo : (~wbS_fifo_full & rsp_valid & fifo_rd_valid));
+    assign fifo_wb_pop = (incomfing_is_bn ? push_to_sfifo : (~wbS_fifo_full & rsp_valid & fifo_rd_valid));
 
     assign dmem_rsp_if.ready = fifo_wb_pop & ~fifo_wb_is_mmio;
     assign mmio_rsp_if.ready = fifo_wb_pop &  fifo_wb_is_mmio;
@@ -167,18 +167,12 @@ module lsu
 
         .wr_valid(fifo_valid),
         .wr_ready(fifo_ready),
-        .wr_data({wb_tag, rd.is_v, mmio_intercept}),
+        .wr_data({wb_tag, rd.is_bn, mmio_intercept}),
 
         .rd_valid(fifo_rd_valid),
         .rd_ready(fifo_wb_pop),
-        .rd_data({fifo_wb_tag, fifo_wb_is_v, fifo_wb_is_mmio})
+        .rd_data({fifo_wb_tag, fifo_wb_is_bn, fifo_wb_is_mmio})
     );
-
-
-    typedef struct packed {
-        wb_tag_t tag;
-        logic [NUMBER_SIZE-1:0] data;
-    } vwb_ret_t;
 
     logic [4-1:0] sfifo_rd_en;
 
@@ -196,7 +190,7 @@ module lsu
 
             .wdata_in({ fifo_wb_tag, rsp_data.data }),
             .wr_en(push_to_sfifo &
-                   incoming_is_v &
+                   incomfing_is_bn &
                    (fifo_wb_tag.rd[1:0] == 2'(i))),
             .full(sfifo_full[i]),
 
@@ -214,47 +208,47 @@ module lsu
 
     always_comb begin
         casez (port_tracker)
-            2'b?0:   vp_sel = 1'b0;
-            2'b01:   vp_sel = 1'b1;
-            default: vp_sel = 1'b0;
+            2'b?0:   bp_sel = 1'b0;
+            2'b01:   bp_sel = 1'b1;
+            default: bp_sel = 1'b0;
         endcase
     end
 
     // ============== Writeback Arbitration ==============
     always_comb begin
         wbS_out     = '{default: '0};
-        wbV_out     = '{default: '0};
+        wbBN_out    = '{default: '0};
         sfifo_rd_en = '0;
 
-        if (fifo_wb_pop & ~incoming_is_v) begin
+        if (fifo_wb_pop & ~incomfing_is_bn) begin
             wbS_out = '{
                 tag: '{
-                    en: TRUE,
+                    en:  TRUE,
                     tid: fifo_wb_tag.tid,
-                    rd: fifo_wb_tag.rd
+                    rd:  fifo_wb_tag.rd
                 },
                 data: rsp_data.data[31:0]
             };
         end
 
-        if (~sfifo_empty[0] & (available_port & ~bank_tracker[0])) begin
+        if (~sfifo_empty[0] & (~port_tracker[0] & ~bank_tracker[0])) begin
             sfifo_rd_en[0] = TRUE;
-            wbV_out = '{ tag:  sfifo_tag_out[0], data: sfifo_d_out[0] };
+            wbBN_out = '{ tag:  sfifo_tag_out[0], data: sfifo_d_out[0] };
         end
 
-        else if (~sfifo_empty[1] & (available_port & ~bank_tracker[1])) begin
+        else if (~sfifo_empty[1] & (~port_tracker[0] & ~bank_tracker[1])) begin
             sfifo_rd_en[1] = TRUE;
-            wbV_out = '{ tag:  sfifo_tag_out[1], data: sfifo_d_out[1] };
+            wbBN_out = '{ tag:  sfifo_tag_out[1], data: sfifo_d_out[1] };
         end
 
-        else if (~sfifo_empty[2] & (available_port & ~bank_tracker[2])) begin
+        else if (~sfifo_empty[2] & (~port_tracker[0] & ~bank_tracker[2])) begin
             sfifo_rd_en[2] = TRUE;
-            wbV_out = '{ tag:  sfifo_tag_out[2], data: sfifo_d_out[2] };
+            wbBN_out = '{ tag:  sfifo_tag_out[2], data: sfifo_d_out[2] };
         end
 
-        else if (~sfifo_empty[3] & (available_port & ~bank_tracker[3])) begin
+        else if (~sfifo_empty[3] & (~port_tracker[0] & ~bank_tracker[3])) begin
             sfifo_rd_en[3] = TRUE;
-            wbV_out = '{ tag:  sfifo_tag_out[3], data: sfifo_d_out[3] };
+            wbBN_out = '{ tag:  sfifo_tag_out[3], data: sfifo_d_out[3] };
         end
 
     end
@@ -266,7 +260,7 @@ module lsu
         if (rst) begin end
         else if (fifo_valid & fifo_ready & (wb_tag.tid == 4 || wb_tag.tid == 5) & (wb_tag.rd == 13)) begin
             $info("Pushing to wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
-                wb_tag.en, wb_tag.tid, wb_tag.rd, rd.is_v, mmio_intercept);
+                wb_tag.en, wb_tag.tid, wb_tag.rd, rd.is_bn, mmio_intercept);
         end
     end
 
@@ -274,7 +268,7 @@ module lsu
         if (rst) begin end
         else if (fifo_rd_valid & fifo_wb_pop & (fifo_wb_tag.tid == 4 || fifo_wb_tag.tid == 5) & (fifo_wb_tag.rd == 13)) begin
             $info("Pulling from wb_tag_fifo { en: %d, tid: %0d, rd: %0d, is_v: %d, mmio_intercept: %d }",
-                fifo_wb_tag.en, fifo_wb_tag.tid, fifo_wb_tag.rd, fifo_wb_is_v, fifo_wb_is_mmio);
+                fifo_wb_tag.en, fifo_wb_tag.tid, fifo_wb_tag.rd, fifo_wb_is_bn, fifo_wb_is_mmio);
         end
     end
     */

@@ -25,9 +25,6 @@ module mmio
     localparam int SLOT_IDX_W           = $clog2(TOTAL_SLOTS);
     localparam int G_IDX_W              = $clog2(GLOBAL_REGS);
 
-
-    // TODO: Make a struct with all the special registers to input to the exec
-    // units needing them
     logic [NUMBER_SIZE-1:0] g_modulus;
     logic [          W-1:0] g_n_prime;
     logic [NUMBER_SIZE-1:0] g_values_space[GLOBAL_REGS];
@@ -92,7 +89,7 @@ module mmio
                 case (1'b1)
                     is_modulus_slot: rsp_data_reg <= '{
                         data: g_modulus,
-                        size: DMEM_V
+                        size: DMEM_BN
                     };
 
                     is_n_prime_slot: rsp_data_reg <= '{
@@ -102,7 +99,7 @@ module mmio
 
                     is_g_vals_slot: rsp_data_reg <= '{
                         data: g_values_space[gval_idx],
-                        size: DMEM_V
+                        size: DMEM_BN
                     };
 
                     is_done_slot: rsp_data_reg <= '{

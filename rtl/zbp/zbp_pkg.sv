@@ -15,7 +15,7 @@ package zbp_pkg;
 
     localparam int REGISTERS = 32;
     localparam int R_IDX_W = $clog2(REGISTERS);
-    localparam logic [4:0] VREGISTERS = 20;
+    localparam logic [4:0] BREGISTERS = 20;
 
     typedef enum logic [R_IDX_W-1:0] {
         ZERO_REG = 'd0,
@@ -57,10 +57,10 @@ package zbp_pkg;
     // Execution unit tag
     typedef enum logic [3:0] {
         EU_NOOP,
-        EU_VMADD,
-        EU_VMMUL,
-        EU_VALU,
-        EU_VCMP,
+        EU_BMADD,
+        EU_BMMUL,
+        EU_BALU,
+        EU_BCMP,
         EU_LSU,
         EU_SALU,
         EU_CF, // Control flow
@@ -108,24 +108,25 @@ package zbp_pkg;
         OP_SH,
         OP_SW,
         // My custom LOAD/STORE vector instrs, still part of LSU
-        OP_LV,
-        OP_SV,
+        OP_LBN,
+        OP_SBN,
 
         // Mod Adder
-        OP_VMADD,
-        OP_VMSUB,
+        OP_BMADD,
+        OP_BMSUB,
 
         // Mod Mull
-        OP_VMMUL,
+        OP_BMMUL,
 
         // Vector ALU
-        OP_VAND,
-        OP_VXOR,
-        OP_VOR,
-        OP_VSLL,
-        OP_VSRL,
-        OP_VMV,
-        OP_VSHFL,
+        OP_BAND,
+        OP_BXOR,
+        OP_BOR,
+        OP_BSLL,
+        OP_BSRL,
+        OP_BMV,
+        OP_BSHFL,
+        OP_BSHFLI,
 
         OP_MV_V_S, // Move chunk of VR to SR
         OP_MV_S_V, // Move SR to chunk of VR
@@ -148,7 +149,7 @@ package zbp_pkg;
     typedef struct packed {
         logic [$bits(imm_t) - R_IDX_W - 1 - 1:0] _pad;
         logic [R_IDX_W-1:0] idx;
-        logic is_v;
+        logic is_bn;
     } rs2_op_t;
 
     typedef union packed {
@@ -164,7 +165,7 @@ package zbp_pkg;
     typedef struct packed {
         logic en;
         logic [R_IDX_W-1:0] idx;
-        logic is_v;
+        logic is_bn;
     } op_info_t;
 
     typedef struct packed {
@@ -201,6 +202,7 @@ package zbp_pkg;
         logic     rd_is_rs;
 
         logic read_stall;
+        logic bshfl_stall;
         `ifdef DEBUG
         logic [31:0] instr;
         `endif
@@ -211,7 +213,7 @@ package zbp_pkg;
     typedef struct packed {
         wb_tag_t tag;
         logic [NUMBER_SIZE-1:0] data;
-    } vwb_t;
+    } bwb_t;
 
     typedef struct packed {
         wb_tag_t tag;
@@ -222,7 +224,7 @@ package zbp_pkg;
         DMEM_B,
         DMEM_H,
         DMEM_W,
-        DMEM_V
+        DMEM_BN
     } dmem_size_t;
 
     typedef struct packed {
@@ -260,8 +262,8 @@ package zbp_pkg;
         cf_pc_adv_t   cf_pc_adv_p;
 
         swb_t wbS;
-        vwb_t wbA;
-        vwb_t wbB;
+        bwb_t wbA;
+        bwb_t wbB;
 
         `ifdef DEBUG
         logic [31:0] instr;
@@ -276,15 +278,15 @@ package zbp_pkg;
     localparam op_info_t OP_ZERO_REG = '{
         en: TRUE,
         idx: '0,
-        is_v: FALSE
+        is_bn: FALSE
     };
     localparam rs2_t OP_RS2_ZERO_REG = '{
         is_imm: FALSE,
         val: rs2_val_t'(rs2_op_t'{
                 _pad: '0,
-                idx: '0,
-                is_v: FALSE
-            })
+                idx:  '0,
+                is_bn: FALSE
+        })
     };
     localparam logic [31:0] NOOP_INSTR = 32'h00000013;
 

@@ -1,4 +1,4 @@
-module vmmul
+module bmmul
     import zbp_pkg::*;
 (
     input logic clk,
@@ -13,22 +13,22 @@ module vmmul
     input mmio_registers_t mmio_regs,
 
     output logic valid_out,
-    output vwb_t wbV
+    output bwb_t wbBN
 );
 
     localparam int MMUL_LAT = 3 * (NUMBER_SIZE / W);
 
     wb_tag_t wb_tag_in;
     assign wb_tag_in = '{
-        en: valid_in,
+        en:  valid_in,
         tid: tid,
-        rd: rd
+        rd:  rd
     };
 
     wb_tag_t wb_tag_out;
 
     assign valid_out = wb_tag_out.en;
-    assign wbV.tag = wb_tag_out;
+    assign wbBN.tag = wb_tag_out;
 
     shiftreg #(
         .DATA_W($bits(wb_tag_t)),
@@ -55,7 +55,7 @@ module vmmul
         .modulus(mmio_regs.modulus),
         .n_prime(mmio_regs.n_prime),
 
-        .res(wbV.data)
+        .res(wbBN.data)
     );
 
-endmodule : vmmul
+endmodule : bmmul

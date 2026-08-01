@@ -1,4 +1,4 @@
-module vmadd
+module bmadd
     import zbp_pkg::*;
 (
     input logic clk,
@@ -14,7 +14,7 @@ module vmadd
     input logic [NUMBER_SIZE-1:0] modulus,
 
     output logic valid_out,
-    output vwb_t wbV
+    output bwb_t wbBN
 );
 
     localparam int MADD_LAT = (NUMBER_SIZE / W) + 1;
@@ -34,11 +34,11 @@ module vmadd
         .rst(rst),
 
         .valid_in(valid_in),
-        .data_in(wb_tag_in),
-        .data_out(wbV.tag)
+        .data_in (wb_tag_in),
+        .data_out(wbBN.tag)
     );
 
-    assign valid_out = wbV.tag.en;
+    assign valid_out = wbBN.tag.en;
 
     mod_add_var #(
         .W(W),
@@ -47,23 +47,23 @@ module vmadd
         .clk(clk),
         .rst(rst),
 
-        .op((op_tag == OP_VMADD) ? 1'b0 : 1'b1), // 0: addition, 1: subtraction
+        .op((op_tag == OP_BMADD) ? 1'b0 : 1'b1), // 0: addition, 1: subtraction
 
         .a(valid_in ? opa : '0),
         .b(valid_in ? opb : '0),
         .modulus(modulus),
 
-        .res(wbV.data)
+        .res(wbBN.data)
     );
 
     // sythesis translate_off
     property op_tag_is_add_or_sub;
         @(posedge clk) disable iff(rst) valid_in |->
-            (op_tag == OP_VMADD || op_tag == OP_VMSUB)
+            (op_tag == OP_BMADD || op_tag == OP_BMSUB)
     endproperty
 
     assert property (op_tag_is_add_or_sub) else
-    $error("Op tag given to VMADD is invalid: %s", op_tag.name());
+    $error("Op tag given to BMADD is invalid: %s", op_tag.name());
     // sythesis translate_on
 
-endmodule : vmadd
+endmodule : bmadd

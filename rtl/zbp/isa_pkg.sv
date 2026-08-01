@@ -11,8 +11,8 @@ package isa_pkg;
         OPCODE_LUI      = 7'b0110111, // U-type load upper imm
         OPCODE_AUIPC    = 7'b0010111, // U-type add upper imm to PC
         OPCODE_SYSTEM   = 7'b1110011, // I-type system/CSRs
-        OPCODE_CUSTOM_0 = 7'b0001011, //
-        OPCODE_CUSTOM_1 = 7'b0101011  //
+        OPCODE_CUSTOM_0 = 7'b0001011, // Bignumber Arithmetic
+        OPCODE_CUSTOM_1 = 7'b0101011  // Bignumber Load/Store
     } opcode_t;
 
     typedef enum logic [3-1:0] {
@@ -27,8 +27,15 @@ package isa_pkg;
     } funct3_alu_t;
 
     typedef enum logic [3-1:0] {
-        F3_VADD_VSUB = 3'h0
-    } funct3_valu_t;
+        F3_BADD_BSUB = 3'h0,
+        F3_BSLL      = 3'h1,
+        F3_BSEQ      = 3'h2,
+        F3_BSLTU     = 3'h3,
+        F3_BXOR      = 3'h4,
+        F3_BSRL      = 3'h5,
+        F3_BOR       = 3'h6,
+        F3_BAND      = 3'h7
+    } funct3_balu_t;
 
     typedef enum logic [3-1:0] {
         F3_BEQ  = 3'h0,
@@ -48,9 +55,9 @@ package isa_pkg;
     } funct3_mem_t;
 
     typedef enum logic [3-1:0] {
-        F3_LOADV  = 3'h0,
-        F3_STOREV = 3'h1
-    } funct3_vlsu_t;
+        F3_LOADBN  = 3'h0,
+        F3_STOREBN = 3'h1
+    } funct3_blsu_t;
 
     typedef enum logic [7-1:0] {
         F7_BASE = 7'h00,
@@ -59,13 +66,14 @@ package isa_pkg;
     } funct7_alu_t;
 
     typedef enum logic [7-1:0] {
-        F7_VMADD = 7'h00,
-        F7_VADD  = 7'h02,
-        F7_VMV    = 7'h03,
-        F7_VSHFL  = 7'h13,
-        F7_VMSUB = 7'h20,
-        F7_VSUB  = 7'h21,
-        F7_VMMUL = 7'h01
-    } funct7_valu_t;
+        F7_BASE_BMADD = 7'h00,
+        F7_BMMUL_BSEQ = 7'h01,
+        F7_BADD       = 7'h02,
+        F7_BMV        = 7'h03,
+        F7_BSHFL      = 7'h13,
+        F7_BSHFLI     = 7'h14,
+        F7_BMSUB      = 7'h20,
+        F7_BSUB       = 7'h21
+    } funct7_balu_t;
 
 endpackage : isa_pkg

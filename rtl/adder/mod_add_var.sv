@@ -99,7 +99,7 @@ module mod_add_var #(
     logic c0[CHUNKS];
     logic cn[CHUNKS];
 
-generate
+    generate
         for (genvar i = 0; i < CHUNKS; i++) begin : gen_adder_block
             logic [W:0] tmp_res0, tmp_res1;
             logic c0_out, cn_out;

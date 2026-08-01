@@ -33,9 +33,6 @@ module zbp_core
     assign wb_bus = ex_to_wb_if.data;
     assign ex_to_wb_if.ready = TRUE;
 
-    logic [4-1:0] bank_tracker;
-    logic [2-1:0] port_tracker;
-
     ////////////////////////////////////////////////////////
     //                                                    //
     //                     FETCH STAGE                    //
@@ -85,10 +82,7 @@ module zbp_core
 
         .wbA(wb_bus.wbA.tag),
         .wbB(wb_bus.wbB.tag),
-        .wbS(wb_bus.wbS.tag),
-
-        .wb_bank_tracker_out(bank_tracker),
-        .wb_port_tracker_out(port_tracker)
+        .wbS(wb_bus.wbS.tag)
     );
 
     ////////////////////////////////////////////////////////
@@ -122,9 +116,6 @@ module zbp_core
 
         .dmem_req_if(dmem_req_if),
         .dmem_rsp_if(dmem_rsp_if),
-
-        .bank_tracker(bank_tracker),
-        .port_tracker(port_tracker),
 
         .program_done(program_done)
     );

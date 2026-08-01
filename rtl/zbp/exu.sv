@@ -11,9 +11,6 @@ module exu
     pipeline_if.out dmem_req_if,
     pipeline_if.in  dmem_rsp_if,
 
-    input logic [4-1:0] bank_tracker,
-    input logic [2-1:0] port_tracker,
-
     output logic program_done
 );
 
@@ -21,10 +18,15 @@ module exu
     logic wb_fifo_full;
     logic salu_ready, salu_can_output;
     logic cfu_ready;
+    logic write_collision;
 
     assign exec_if.ready = ~memory_stall & ~wb_fifo_full &
-        (((exec_if.data.eu_tag == EU_SALU) ? salu_ready :
-          (exec_if.data.eu_tag == EU_CF) ? cfu_ready : TRUE));
+        (((exec_if.data.eu_tag == EU_SALU)  ? salu_ready :
+          (exec_if.data.eu_tag == EU_CF)    ? cfu_ready :
+          (exec_if.data.eu_tag == EU_BMMUL) ? ~write_collision :
+          (exec_if.data.eu_tag == EU_BMADD) ? ~write_collision :
+          (exec_if.data.eu_tag == EU_BALU)  ? ~write_collision :
+          TRUE));
 
     logic [31:0] imm_val;
     always_comb begin
@@ -37,19 +39,63 @@ module exu
 
     mmio_registers_t mmio_regs_out;
 
-    // VMADD
-    vwb_t wbV_vmadd_out;
-    logic vmadd_valid_in, vmadd_valid_out;
+    // BN WB Tracker
+    logic [4-1:0] bank_tracker;
+    logic [2-1:0] port_tracker;
 
-    assign vmadd_valid_in = exec_if.valid
-        & (exec_if.data.eu_tag == EU_VMADD)
-        & exec_if.data.rd.en;
-
-    vmadd vmadd_inst (
+    bnwb_tracker wb_track_inst (
         .clk(clk),
         .rst(rst),
 
-        .valid_in(vmadd_valid_in),
+        .is_bn_write(exec_if.data.rd.en & exec_if.data.rd.is_bn),
+        .eu_tag(exec_if.data.eu_tag),
+        .op_tag(exec_if.data.op_tag),
+        .bank_target(exec_if.data.rd.idx[1:0]),
+
+        .valid_in(exec_if.valid & exec_if.ready),
+
+        .write_collision(write_collision),
+        .bank_tracker(bank_tracker),
+        .port_tracker(port_tracker)
+    );
+
+    // BALU
+    bwb_t wb_balu_out;
+    logic balu_valid_in, balu_valid_out;
+
+    assign balu_valid_in = exec_if.valid & exec_if.ready &
+        (exec_if.data.eu_tag == EU_BALU) &
+        exec_if.data.rd.en;
+
+    balu balu_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(balu_valid_in),
+        .tid(exec_if.data.tid),
+        .rd(exec_if.data.rd.idx),
+        .op_tag(exec_if.data.op_tag),
+
+        .opa(exec_if.data.rs1),
+        .opb(exec_if.data.rs2),
+
+        .valid_out(balu_valid_out),
+        .wbBN(wb_balu_out)
+    );
+
+    // BMADD
+    bwb_t wb_bmadd_out;
+    logic bmadd_valid_in, bmadd_valid_out;
+
+    assign bmadd_valid_in = exec_if.valid & exec_if.ready
+        & (exec_if.data.eu_tag == EU_BMADD)
+        & exec_if.data.rd.en;
+
+    bmadd bmadd_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(bmadd_valid_in),
         .tid(exec_if.data.tid),
         .rd(exec_if.data.rd.idx),
         .op_tag(exec_if.data.op_tag),
@@ -59,35 +105,35 @@ module exu
 
         .modulus(mmio_regs_out.modulus),
 
-        .valid_out(vmadd_valid_out),
-        .wbV(wbV_vmadd_out)
+        .valid_out(bmadd_valid_out),
+        .wbBN(wb_bmadd_out)
     );
 
-    // VMMUL
-    vwb_t wbV_vmmul_out;
+    // BMMUL
+    bwb_t wb_bmmul_out;
 
-    logic vmmul_valid_in, vmmul_valid_out;
+    logic bmmul_valid_in, bmmul_valid_out;
 
-    assign vmmul_valid_in = exec_if.valid
-            & (exec_if.data.eu_tag == EU_VMMUL)
+    assign bmmul_valid_in = exec_if.valid & exec_if.ready
+            & (exec_if.data.eu_tag == EU_BMMUL)
             & exec_if.data.rd.en;
 
-    vmmul vmmul_inst (
+    bmmul bmmul_inst (
         .clk(clk),
         .rst(rst),
 
-        .valid_in(vmmul_valid_in),
+        .valid_in(bmmul_valid_in),
         .tid(exec_if.data.tid),
         .rd(exec_if.data.rd.idx),
         .opa(exec_if.data.rs1),
         .opb(exec_if.data.rs2),
 
         .mmio_regs(mmio_regs_out),
-        .valid_out(vmmul_valid_out),
-        .wbV(wbV_vmmul_out)
+        .valid_out(bmmul_valid_out),
+        .wbBN(wb_bmmul_out)
     );
 
-    // VCMP
+    // BCMP
 
     // SALU
     swb_t wbS_salu_out;
@@ -184,15 +230,15 @@ module exu
 
     // LSU
     swb_t wbS_lsu_out;
-    vwb_t wbV_lsu_out;
-    logic lsu_vport_sel;
-    logic lsu_vport_is_0, lsu_vport_is_1;
+    bwb_t wbBN_lsu_out;
+    logic lsu_bnport_sel;
+    logic lsu_bnport_is_0, lsu_bnport_is_1;
 
     logic lsu_fire;
     assign lsu_fire = exec_if.valid & (exec_if.data.eu_tag == EU_LSU);
 
-    assign lsu_vport_is_0 = (lsu_vport_sel == 1'b0);
-    assign lsu_vport_is_1 = (lsu_vport_sel == 1'b1);
+    assign lsu_bnport_is_0 = (lsu_bnport_sel == 1'b0);
+    assign lsu_bnport_is_1 = (lsu_bnport_sel == 1'b1);
 
     lsu #(
         .INTERMEDIATE_STORAGE(2),
@@ -223,8 +269,8 @@ module exu
 
         .mem_stall(memory_stall),
         .wbS_out(wbS_lsu_out),
-        .wbV_out(wbV_lsu_out),
-        .vp_sel(lsu_vport_sel)
+        .wbBN_out(wbBN_lsu_out),
+        .bp_sel(lsu_bnport_sel)
     );
 
 
@@ -303,16 +349,17 @@ module exu
 
     typedef struct packed {
         logic valid;
-        vwb_t data;
-    } vcand_t;
+        bwb_t data;
+    } bcand_t;
 
-    localparam int NUM_VCANDS = 3;
-    vcand_t vcands[NUM_VCANDS];
+    localparam int NUM_BNCANDS = 4;
+    bcand_t bncands[NUM_BNCANDS];
     logic assigned_A;
 
-    assign vcands[0] = '{valid: wbV_lsu_out.tag.en, data: wbV_lsu_out};
-    assign vcands[1] = '{valid: vmmul_valid_out,    data: wbV_vmmul_out};
-    assign vcands[2] = '{valid: vmadd_valid_out,    data: wbV_vmadd_out};
+    assign bncands[0] = '{valid: wbBN_lsu_out.tag.en, data: wbBN_lsu_out};
+    assign bncands[1] = '{valid: bmmul_valid_out,     data: wb_bmmul_out};
+    assign bncands[2] = '{valid: bmadd_valid_out,     data: wb_bmadd_out};
+    assign bncands[3] = '{valid: balu_valid_out,      data: wb_balu_out};
 
 
     always_comb begin
@@ -337,30 +384,17 @@ module exu
         end
 
         assigned_A = FALSE;
-        for(int i = 0; i < NUM_VCANDS; i++) begin
-            if (vcands[i].valid) begin
+        for(int i = 0; i < NUM_BNCANDS; i++) begin
+            if (bncands[i].valid) begin
                 if(~assigned_A) begin
-                    wb_p.wbA = vcands[i].data;
+                    wb_p.wbA = bncands[i].data;
                     assigned_A = TRUE;
                 end
                 else begin
-                    wb_p.wbB = vcands[i].data;
+                    wb_p.wbB = bncands[i].data;
                 end
             end
         end
-
-        // Vector port A WB
-        // case (1'b1)
-        //     (wbV_lsu_out.tag.en & lsu_vport_is_0): wb_p.wbA = wbV_lsu_out;
-        //     vmmul_valid_out:                       wb_p.wbA = wbV_vmmul_out;
-        //     default:                               wb_p.wbA = '{default: '0};
-        // endcase
-        //
-        // // Vector port B WB
-        // case (1'b1)
-        //     (wbV_lsu_out.tag.en & lsu_vport_is_1): wb_p.wbB = wbV_lsu_out;
-        //     default:                               wb_p.wbB = '{default: '0};
-        // endcase
 
         wb_p.cf_redirect_p = cf_redirect_p;
         wb_p.cf_pc_adv_p = cf_pc_adv;
@@ -373,5 +407,29 @@ module exu
                          wb_p.wbB.tag.en |
                          wb_p.cf_redirect_p.vld |
                          wb_p.cf_pc_adv_p.vld;
+
+    // synthesis translate_off
+    logic [NUM_BNCANDS-1:0] active_bn_cands;
+    int i;
+
+    always_comb begin
+        for(int i = 0; i < NUM_BNCANDS; i++) begin
+            active_bn_cands[i] = bncands[i].valid;
+        end
+    end
+    property max_two_bn_wb_cands;
+        @(posedge clk) disable iff (rst)
+        $countones(active_bn_cands) <= 2;
+    endproperty
+
+    assert property (max_two_bn_wb_cands) else begin
+        for(i = 0; i < NUM_BNCANDS; i++) begin
+            if (bncands[i].valid)
+                $display(" [%d]: TID[%d], RD: %d",
+                i, bncands[i].data.tag.tid, bncands[i].data.tag.rd);
+        end
+        $error("WB: More than two canditates at BN Ports");
+    end
+    // synthesis translate_on
 
 endmodule : exu

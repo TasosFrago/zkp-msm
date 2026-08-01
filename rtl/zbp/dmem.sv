@@ -19,12 +19,13 @@ module dmem #(
 
     initial begin
         for (int i = 0; i < (MEM_SIZE_BYTES/4); i++) mem[i] = 32'hXXXXXXXX;
+        $display("DMEM: MEM_SIZE_BYTES: %d, 0x%X", MEM_SIZE_BYTES, MEM_SIZE_BYTES);
 
         if (INIT_FILE != "") begin
             $readmemh(INIT_FILE, mem);
             $display("DMEM: Loaded %s", INIT_FILE);
-            $display("Output initial dmem state");
-            dump_dmem("init_dmem.txt");
+            // $display("Output initial dmem state");
+            // dump_dmem("init_dmem.txt");
         end
     end
 
@@ -37,7 +38,7 @@ module dmem #(
             mem[word_addr] = data;
         end
         else begin
-            $display("DPI-C DMEM Error: Tried to write out of memory bounds.");
+            $display("DPI-C DMEM Error: Tried to write out of memory bounds. To addr: %0d. Max allowed %0d", word_addr, (MEM_SIZE_BYTES/4) -1);
         end
     endfunction : dmem_write_word
 
@@ -105,15 +106,15 @@ module dmem #(
     import zbp_pkg::DMEM_B;
     import zbp_pkg::DMEM_H;
     import zbp_pkg::DMEM_W;
-    import zbp_pkg::DMEM_V;
+    import zbp_pkg::DMEM_BN;
 
     int bytes_len;
     always_comb begin
         case (req.size)
-            DMEM_B: bytes_len = 1;
-            DMEM_H: bytes_len = 2;
-            DMEM_W: bytes_len = 4;
-            DMEM_V: bytes_len = NUMBER_SIZE / 8;
+            DMEM_B:  bytes_len = 1;
+            DMEM_H:  bytes_len = 2;
+            DMEM_W:  bytes_len = 4;
+            DMEM_BN: bytes_len = NUMBER_SIZE / 8;
             default: bytes_len = 4;
         endcase
     end
@@ -213,7 +214,7 @@ module dmem #(
     /*
     always_ff @(posedge clk) begin
         if (!rst) begin
-            if (req_if.valid & req_if.ready & req_if.data.send_data & (req_if.data.size == DMEM_V)) begin
+            if (req_if.valid & req_if.ready & req_if.data.send_data & (req_if.data.size == DMEM_BN)) begin
                 $info("Storing vector value 0x%0h to addr 0x%0h", req.data, req.addr);
             end
         end

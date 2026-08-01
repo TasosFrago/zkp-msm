@@ -20,8 +20,6 @@ module cfu
 
     output logic branch_taken,
     pipeline_if cfu_out_if
-    // output swb_t res,
-    // output cf_redirect_t cf_redirect
 );
 
     logic is_eq, is_lt, is_ltu;
@@ -29,8 +27,6 @@ module cfu
     assign is_eq  = (rs1 == rs2);
     assign is_lt  = ($signed(rs1) < $signed(rs2));
     assign is_ltu = (rs1 < rs2);
-
-    // logic branch_taken;
 
     always_comb begin
         case (op_tag)
