@@ -4,8 +4,8 @@
 _start:
 	# Stack pointer setup for each thread
 	la   t0, __stack_top # Load base stack addr
-	slli t1, x4, 10      # t1 = TID * 1024
-	sub  sp, t0, t1      # sp = __stack_top - (TID * 1024)
+	slli t1, tp, 12      # t1 = TID * 4096
+	sub  sp, t0, t1      # sp = __stack_top - (TID * 4096)
 
 	jal  ra, main
 

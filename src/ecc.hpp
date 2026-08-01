@@ -328,6 +328,15 @@ public:
 		auto S2 = mont.mul(Qm.Y, Pm.ZZZ);
 		auto P = mda::sub(U2, U1, modulus);
 		auto R = mda::sub(S2, S1, modulus);
+
+		if(P.is_zero()) {
+			if(R.is_zero()) {
+				return dbl_m(Pm);
+			} else {
+				return XYZZPoint<Bits>{};
+			}
+		}
+
 		auto PP = mont.mul(P, P);
 		auto PPP = mont.mul(PP, P);
 		auto Q = mont.mul(U1, PP);
@@ -1079,7 +1088,7 @@ auto msm(
 
 	constexpr size_t c = WindowBits;
 	constexpr size_t num_buckets = (1 << c) - 1;
-	constexpr size_t num_windows = (CurveT::bits + c - 1) / c;
+	constexpr size_t num_windows = 256 / c;
 
 	auto get_window_val = [](const bga::BigInt<CurveT::bits> &scalar, int window_idx)
 	    -> int {
@@ -1090,10 +1099,10 @@ auto msm(
 		size_t chunk_idx = start_bit / CurveT::bits;
 		size_t bit_offset = start_bit % CurveT::bits;
 
-		uint_t val = scalar.get(chunk_idx) >> bit_offset;
+		uint_t val = scalar.get_safe(chunk_idx) >> bit_offset;
 
 		if(bit_offset + c > CurveT::bits) {
-			uint_t next_chunk = scalar.get(chunk_idx + 1);
+			uint_t next_chunk = scalar.get_safe(chunk_idx + 1);
 			val |= (next_chunk << (CurveT::bits - bit_offset));
 		}
 
@@ -1135,7 +1144,7 @@ auto msm(
 		result = curve.add_m(result, acc);
 	}
 
-	return result.demont(curve.demont);
+	return result.demont(curve.mont);
 }
 
 template <typename CurveT, typename PointT>

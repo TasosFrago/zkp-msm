@@ -15,6 +15,13 @@ typedef struct {
 	u32 w[8];
 } __attribute__((aligned(32))) u256;
 
+typedef u32 bgn __attribute__((vector_size(32), aligned(4)));
+
+typedef union {
+	u32 w[8];
+	bgn v;
+} ubgn;
+
 typedef volatile i8  vi8;
 typedef volatile u8  vu8;
 typedef volatile i16 vi16;
@@ -22,11 +29,59 @@ typedef volatile u16 vu16;
 typedef volatile i32 vi32;
 typedef volatile u32 vu32;
 
-typedef struct {
-	vu32 w[8];
-} vu256;
-
 #define NULL ((void *)0)
+
+void *memset(void *dest, int val, unsigned int len)
+{
+	unsigned char *ptr = dest;
+	unsigned char fill = (unsigned char)val;
+
+	if (len >= 32) {
+		u32 word = ((u32)fill << 24) | ((u32)fill << 16) |
+		           ((u32)fill << 8)  |  (u32)fill;
+		bgn pattern;
+		u32 *pw = (u32 *)&pattern;
+		for (int i = 0; i < 8; i++) {
+			pw[i] = word;
+		}
+
+		bgn *bp = (bgn *)ptr;
+		unsigned int chunks = len >> 5;
+		while (chunks--) {
+			*bp++ = pattern;
+		}
+		ptr = (unsigned char *)bp;
+		len &= 31;
+	}
+
+	while (len-- > 0) {
+		*ptr++ = val;
+	}
+	return dest;
+}
+
+void *memcpy(void *dest, const void *src, unsigned int len)
+{
+	unsigned char *d = dest;
+	const unsigned char *s = src;
+
+	if (len >= 32) {
+		bgn *bd = (bgn *)d;
+		const bgn *bs = (const bgn *)s;
+		unsigned int chunks = len >> 5;
+		while (chunks--) {
+			*bd++ = *bs++;
+		}
+		d = (unsigned char *)bd;
+		s = (const unsigned char *)bs;
+		len &= 31;
+	}
+
+	while (len-- > 0) {
+		*d++ = *s++;
+	}
+	return dest;
+}
 
 #define MMIO_BASE_ADDR 0xF0000000U
 #define MMIO_BYTES_PER_SLOT 0x20U
@@ -44,21 +99,25 @@ typedef struct {
 #define MMIO_GVAL_ADDR(i) (MMIO_GVALS_START_ADDR + (i) * MMIO_BYTES_PER_SLOT)
 
 #define MMIO_NPRIME ((volatile u32 *)MMIO_NPRIME_ADDR)
-#define MMIO_MODULUS ((vu256 *)MMIO_MODULUS_ADDR)
-#define MMIO_GVAL(i) ((vu256 *)MMIO_GVAL_ADDR(i))
+#define MMIO_MODULUS ((volatile bgn *)MMIO_MODULUS_ADDR)
+#define MMIO_GVAL(i) ((volatile bgn *)MMIO_GVAL_ADDR(i))
 #define MMIO_DONE ((volatile u32 *)MMIO_DONE_ADDR)
 
 #define NUM_THREADS 32
 
 static inline __attribute__((always_inline)) int get_tid(void)
 {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wuninitialized"
 	register u32 tid __asm__("x4");
+	__asm__ volatile ("" : "=r" (tid));
 	return tid;
+	#pragma clang diagnostic pop
 }
 
 #define MODE_256B
 
-#define TESTING_INSTRUCTIONS
+// #define TESTING_INSTRUCTIONS
 #ifdef TESTING_INSTRUCTIONS
 
 static inline __attribute__((always_inline)) u32 zbp_vmmul(u32 a, u32 b)
@@ -115,6 +174,41 @@ static inline __attribute__((always_inline)) void zbp_sv(u256 *ptr, u32 v_handle
 		:
 		: "r" (ptr), "r" (v_handle)
 	);
+}
+
+#else
+
+#define builtin_fn(name) \
+	extern bgn __builtin_riscv_zkp_##name(bgn, bgn)
+
+builtin_fn(bmmul);
+builtin_fn(bmadd);
+builtin_fn(bmsub);
+
+
+static inline __attribute__((always_inline)) bgn zbp_bmadd(bgn a, bgn b)
+{
+	return __builtin_riscv_zkp_bmadd(a, b);
+}
+
+static inline __attribute__((always_inline)) bgn zbp_bmsub(bgn a, bgn b)
+{
+	return __builtin_riscv_zkp_bmsub(a, b);
+}
+
+static inline __attribute__((always_inline)) bgn zbp_reduce(bgn a)
+{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wuninitialized"
+	register bgn zero_val __asm__("b0");
+	__asm__ volatile ("" : "=r" (zero_val));
+	return __builtin_riscv_zkp_bmadd(a, zero_val);
+	#pragma clang diagnostic pop
+}
+
+static inline __attribute__((always_inline)) bgn zbp_bmmul(bgn a, bgn b)
+{
+	return zbp_reduce(__builtin_riscv_zkp_bmmul(a, b));
 }
 
 #endif // TESTING_INSTRUCTIONS
