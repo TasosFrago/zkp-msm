@@ -17,7 +17,7 @@ SIZE    := $(LLVM_BIN)/llvm-size
 
 # Flags
 OPTIMIZE := -O2
-CFLAGS   := -g -Wall -nostdlib -target riscv32-unknown-elf -march=rv32im_xzkp -mabi=ilp32 $(OPTIMIZE) -I$(ROOT_DIR)/fw/
+CFLAGS   := -g -Wall -nostdlib -target riscv32-unknown-elf -march=rv32im_zbb_xzkp -mabi=ilp32 $(OPTIMIZE) -I$(ROOT_DIR)/fw/
 CFLAGS   += -mllvm -riscv-xzkp-max-bregs=19
 # CFLAGS  += -Xclang -target-feature -Xclang +xzkp
 # CFLAGS   += -ffixed-x21 -ffixed-x22 -ffixed-x23 -ffixed-x24 -ffixed-x25 -ffixed-x26 -ffixed-x27 -ffixed-x28 -ffixed-x29 -ffixed-x30 -ffixed-x31

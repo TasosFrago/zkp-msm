@@ -42,6 +42,9 @@ bgn mont_trans_back(const bgn *v);
 void mont_init_points(const point_arr_t *P, point_arr_t *Pm);
 void mont_trans_back_points(const point_arr_t *P, point_arr_t *Pm);
 
+void mont_init_points_mt(const point_arr_t *P, point_arr_t *Pm);
+void mont_trans_back_points_mt(const point_arr_t *P, point_arr_t *Pm);
+
 void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i32 *out_valid);
 void msm_singleThreaded(const point_arr_t *points, const scalar_arr_t *scalars);
 
@@ -64,7 +67,9 @@ int main()
 	point_arr_t *pt_arr = (point_arr_t *)__inputs_base;
 	scalar_arr_t *sc_arr = (scalar_arr_t *)(__inputs_base + sizeof(u32) + 64 * sizeof(xyzz_t));
 
-	mont_init_points(pt_arr, pt_arr);
+	mont_init_points_mt(pt_arr, pt_arr);
+
+	zbp_sync_barrier();
 
 	xyzz_t partial;
 	i32 partial_ok;
@@ -75,15 +80,12 @@ int main()
 	partial_valid[get_tid()] = (u32)partial_ok;
 	partial_done[get_tid()] = 1;
 
+	zbp_sync_barrier();
+
 	i32 Q_valid = 0;
 	xyzz_t Q;
 
 	if(get_tid() == 0) {
-		for(u32 t = 0; t < NUM_THREADS; t++) {
-			while(!partial_done[t]) {
-				__asm__ volatile ("nop");
-			}
-		}
 		for(u32 t = 0; t < NUM_THREADS; t++) {
 			if(!partial_valid[t]) {
 				continue;
@@ -342,6 +344,35 @@ void mont_trans_back_points(const point_arr_t *P, point_arr_t *Pm)
 {
 	Pm->size = P->size;
 	for(i32 i = 0; i < P->size; i++) {
+		Pm->points[i].x   = mont_trans_back(&P->points[i].x);
+		Pm->points[i].y   = mont_trans_back(&P->points[i].y);
+		Pm->points[i].zz  = mont_trans_back(&P->points[i].zz);
+		Pm->points[i].zzz = mont_trans_back(&P->points[i].zzz);
+	}
+}
+
+void mont_init_points_mt(const point_arr_t *P, point_arr_t *Pm)
+{
+	u32 start, count;
+	get_thread_range(P->size, get_tid(), &start, &count);
+
+	Pm->size = P->size;
+
+	for(i32 i = start; i < start + count; i++) {
+		Pm->points[i].x   = mont_init(&P->points[i].x);
+		Pm->points[i].y   = mont_init(&P->points[i].y);
+		Pm->points[i].zz  = mont_init(&P->points[i].zz);
+		Pm->points[i].zzz = mont_init(&P->points[i].zzz);
+	}
+}
+
+void mont_trans_back_points_mt(const point_arr_t *P, point_arr_t *Pm)
+{
+	u32 start, count;
+	get_thread_range(P->size, get_tid(), &start, &count);
+
+	Pm->size = P->size;
+	for(i32 i = start; i < start + count; i++) {
 		Pm->points[i].x   = mont_trans_back(&P->points[i].x);
 		Pm->points[i].y   = mont_trans_back(&P->points[i].y);
 		Pm->points[i].zz  = mont_trans_back(&P->points[i].zz);

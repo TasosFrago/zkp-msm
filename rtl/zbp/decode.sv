@@ -294,7 +294,7 @@ module decode
             end
 
             OPCODE_SYSTEM: begin
-                out_data.eu_tag = EU_SYNC;
+                out_data.eu_tag = EU_NOOP;
                 out_data.op_tag = OP_NONE;
             end
 
@@ -412,6 +412,28 @@ module decode
                         out_data.rs2.is_imm          = TRUE;
                         out_data.rs2.val.as_imm.fmt  = IMM_I_S;
                         out_data.rs2.val.as_imm.bits = cimm_s;
+                    end
+
+                    F3_SYNCBAR: begin
+                        out_data.eu_tag = EU_CF;
+                        out_data.op_tag = OP_SYNC;
+
+                        out_data.rs1 = '{
+                            en:    FALSE,
+                            idx:   instr[19:15],
+                            is_bn: FALSE
+                        };
+
+                        out_data.rd_is_rs = FALSE;
+                        out_data.rd = '{
+                            en:    FALSE,
+                            idx:   instr[11:7],
+                            is_bn: FALSE
+                        };
+
+                        out_data.rs2.is_imm          = TRUE;
+                        out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs2.val.as_imm.bits = cimm_i;
                     end
 
                     default: begin

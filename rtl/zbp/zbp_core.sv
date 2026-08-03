@@ -48,6 +48,8 @@ module zbp_core
         .cf_redirect(wb_bus.cf_redirect_p),
         .cf_pc_adv  (wb_bus.cf_pc_adv_p),
 
+        .cf_sync_finished(wb_bus.cf_sync_finished),
+
         .iss_back_if(dec_to_fetch_iss_back_if),
         .fetch_if(fetch_to_dec_if)
     );

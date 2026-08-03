@@ -114,7 +114,7 @@ run: sim
 	@mkdir -p $(BUILD_DIR)/dbg_logs
 	@cd $(BUILD_DIR) && /usr/bin/time -f "$(TIME_FMT)" ./V$(TOP_MOD) \
 		+MEM_FILE=$(abspath $(FW_TARGET)) \
-		+NO_FETCH_TRACE
+		+DBG_PROBE
 
 	@echo -e "\n\033[0;36m[SIM] Checking Register Dump (First 16 lines):\033[0m"
 	@head -n 16 $(BUILD_DIR)/scalar_regs_dump.txt || true

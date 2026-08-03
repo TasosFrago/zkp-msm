@@ -10,6 +10,8 @@ module fetch
     input cf_redirect_t cf_redirect,
     input cf_pc_adv_t   cf_pc_adv,
 
+    input logic cf_sync_finished,
+
     pipeline_if.in iss_back_if,
     pipeline_if.out fetch_if
 );
@@ -52,10 +54,21 @@ module fetch
                 busy_tb[iss_back_d.tid] <= FALSE;
             end
 
-            if (cf_pc_adv.vld)   busy_tb[cf_pc_adv.tid] <= FALSE;
-            if (cf_redirect.vld) busy_tb[cf_redirect.tid] <= FALSE;
+            if (cf_pc_adv.vld)    busy_tb[cf_pc_adv.tid] <= FALSE;
+            if (cf_redirect.vld)  busy_tb[cf_redirect.tid] <= FALSE;
+            if (cf_sync_finished) busy_tb <= '0;
         end
     end
+
+    // synthesis translate_off
+    property threads_busy_when_sync_finished;
+        @(posedge clk) disable iff (rst)
+        cf_sync_finished |-> &busy_tb;
+    endproperty
+
+    assert property (threads_busy_when_sync_finished) else
+    $error("Sync Finished while all threads weren't on sleep.");
+    // synthesis translate_on
 
     // Receive IMEM response
     imem_rsp_t rsp_data;
@@ -79,6 +92,9 @@ module fetch
                     pc_tb[t] <= cf_redirect.pc;
                 end
                 else if (cf_pc_adv.vld && (cf_pc_adv.tid == TID_W'(t))) begin
+                    pc_tb[t] <= pc_tb[t] + 32'd4;
+                end
+                else if (cf_sync_finished) begin
                     pc_tb[t] <= pc_tb[t] + 32'd4;
                 end
             end

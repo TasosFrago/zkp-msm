@@ -179,6 +179,7 @@ module exu
     swb_t wbS_cfu_out;
     cf_redirect_t cf_redirect_p;
     cf_pc_adv_t   cf_pc_adv;
+    logic cf_sync_finished;
 
     logic cfu_branch_taken;
 
@@ -206,6 +207,7 @@ module exu
         .op_tag(exec_if.data.op_tag),
 
         .branch_taken(cfu_branch_taken),
+        .sync_finished(cf_sync_finished),
         .cfu_out_if(cfu_out_if)
     );
 
@@ -215,7 +217,7 @@ module exu
     logic mmio_intercept;
 
     mmio #(
-        .BASE_ADDR(32'hF0000000),
+        .BASE_ADDR(32'hF000_0000),
         .GLOBAL_REGS(3)
     ) mmio_inst (
         .clk(clk),
@@ -281,7 +283,8 @@ module exu
         end
         else if (exec_if.valid & exec_if.ready) begin
             cf_pc_adv <= '{
-                vld: ~(cfu_valid_in & cfu_branch_taken),
+                vld: ~(cfu_valid_in &
+                      (cfu_branch_taken | (exec_if.data.op_tag == OP_SYNC))),
                 tid: exec_if.data.tid
             };
         end
@@ -289,7 +292,17 @@ module exu
             cf_pc_adv <= '{default: '0};
         end
     end
+
     // synthesis translate_off
+    property cf_pc_adv_doesnt_fire_on_SYNC;
+        @(posedge clk) disable iff (rst)
+        (exec_if.valid & exec_if.ready &
+        (exec_if.data.op_tag == OP_SYNC)) |=> ~cf_pc_adv.vld;
+    endproperty
+
+    assert property (cf_pc_adv_doesnt_fire_on_SYNC) else
+    $error("cf_pc_adv shouldn't go back on a sync instruction");
+
     property scalar_units_dont_fire_together;
         @(posedge clk) disable iff (rst)
         ~(salu_fired & cfu_fired)
@@ -398,6 +411,7 @@ module exu
 
         wb_p.cf_redirect_p = cf_redirect_p;
         wb_p.cf_pc_adv_p = cf_pc_adv;
+        wb_p.cf_sync_finished = cf_sync_finished;
     end
 
     assign wb_if.data = wb_p;
@@ -406,7 +420,8 @@ module exu
                          wb_p.wbA.tag.en |
                          wb_p.wbB.tag.en |
                          wb_p.cf_redirect_p.vld |
-                         wb_p.cf_pc_adv_p.vld;
+                         wb_p.cf_pc_adv_p.vld |
+                         wb_p.cf_sync_finished;
 
     // synthesis translate_off
     logic [NUM_BNCANDS-1:0] active_bn_cands;

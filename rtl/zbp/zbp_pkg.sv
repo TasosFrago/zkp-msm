@@ -63,8 +63,7 @@ package zbp_pkg;
         EU_BCMP,
         EU_LSU,
         EU_SALU,
-        EU_CF, // Control flow
-        EU_SYNC
+        EU_CF // Control flow
     } eu_tag_t;
 
     // Enum to differentiate the operations inside each selected exec unit
@@ -128,8 +127,7 @@ package zbp_pkg;
         OP_BSHFL,
         OP_BSHFLI,
 
-        OP_MV_V_S, // Move chunk of VR to SR
-        OP_MV_S_V, // Move SR to chunk of VR
+        OP_SYNC,
 
         OP_NONE,
         OP_INVALID
@@ -260,6 +258,7 @@ package zbp_pkg;
     typedef struct packed {
         cf_redirect_t cf_redirect_p;
         cf_pc_adv_t   cf_pc_adv_p;
+        logic         cf_sync_finished;
 
         swb_t wbS;
         bwb_t wbA;

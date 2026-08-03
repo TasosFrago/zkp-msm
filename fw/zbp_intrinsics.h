@@ -185,6 +185,8 @@ builtin_fn(bmmul);
 builtin_fn(bmadd);
 builtin_fn(bmsub);
 
+extern void __builtin_riscv_zkp_sync_barrier(const int);
+
 
 static inline __attribute__((always_inline)) bgn zbp_bmadd(bgn a, bgn b)
 {
@@ -209,6 +211,16 @@ static inline __attribute__((always_inline)) bgn zbp_reduce(bgn a)
 static inline __attribute__((always_inline)) bgn zbp_bmmul(bgn a, bgn b)
 {
 	return zbp_reduce(__builtin_riscv_zkp_bmmul(a, b));
+}
+
+static inline __attribute__((always_inline)) void zbp_sync_barrier(void)
+{
+	__builtin_riscv_zkp_sync_barrier(0);
+}
+
+static inline __attribute__((always_inline)) i32 zbp_ctz(u32 mask)
+{
+	return __builtin_ctz(mask);
 }
 
 #endif // TESTING_INSTRUCTIONS

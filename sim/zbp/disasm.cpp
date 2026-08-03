@@ -51,7 +51,7 @@ struct LLVMDisassembler {
 
 		MII.reset(TheTarget->createMCInstrInfo());
 
-		STI.reset(TheTarget->createMCSubtargetInfo(TheTriple, "generic", "+m,+xzkp"));
+		STI.reset(TheTarget->createMCSubtargetInfo(TheTriple, "generic", "+m,+zbb,+xzkp"));
 
 		Ctx = std::make_unique<MCContext>(TheTriple, *MAI, *MRI, *STI);
 

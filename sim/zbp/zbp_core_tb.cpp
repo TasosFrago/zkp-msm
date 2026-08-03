@@ -291,9 +291,9 @@ int main(int argc, char **argv)
 	tick();
 	dut->rst = 0;
 
-	constexpr size_t MSM_SIZE = 64;
+	constexpr size_t MSM_SIZE = 2;
 	constexpr size_t POINTS_STRUCT_ADDR = 0x44000;
-	constexpr size_t SCALARS_STRUCT_ADDR = POINTS_STRUCT_ADDR + 4 + (MSM_SIZE * (4 * (256/8)));
+	constexpr size_t SCALARS_STRUCT_ADDR = POINTS_STRUCT_ADDR + 4 + (64 * (4 * (256/8)));
 	std::println("POINTS_STRUCT_ADDR = 0x{:X}", POINTS_STRUCT_ADDR);
 	std::println("SCALARS_STRUCT_ADDR = 0x{:X}", SCALARS_STRUCT_ADDR);
 

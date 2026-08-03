@@ -19,6 +19,7 @@ module cfu
     input op_tag_t op_tag,
 
     output logic branch_taken,
+    output logic sync_finished,
     pipeline_if cfu_out_if
 );
 
@@ -65,43 +66,29 @@ module cfu
         pc:  target_pc
     };
 
-    // always_ff @(posedge clk) begin
-    //     if (rst) begin
-    //         res         <= '{default: '0};
-    //         cf_redirect <= '{default: '0};
-    //     end
-    //     else begin
-    //         res <= '{
-    //             tag: '{
-    //                 en: valid_in & rd_en &
-    //                     (op_tag == OP_JAL || op_tag == OP_JALR),
-    //                 tid: tid,
-    //                 rd: rd
-    //             },
-    //             data: pc + 32'd4
-    //         };
-    //
-    //         cf_redirect <= '{
-    //             vld: valid_in & branch_taken,
-    //             tid: tid,
-    //             pc: target_pc
-    //         };
-    //     end
-    // end
-
     skid_buffer #(
         .DATA_W($bits(cf_redirect_t) + $bits(swb_t))
     ) cfu_out_buff(
         .clk(clk),
         .rst(rst),
 
-        .valid_in(valid_in),
+        .valid_in(valid_in & (op_tag != OP_SYNC)),
         .ready_in(ready_in),
         .data_in ({rd_res, cf_redirect}),
 
         .valid_out(cfu_out_if.valid),
         .ready_out(cfu_out_if.ready),
         .data_out (cfu_out_if.data)
+    );
+
+    sbu sync_barrier_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(valid_in & (op_tag == OP_SYNC)),
+        .tid(tid),
+
+        .sync_finished(sync_finished)
     );
 
 endmodule : cfu

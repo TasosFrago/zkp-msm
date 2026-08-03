@@ -21,7 +21,7 @@ module tb_top #(
 
     imem #(
         .INIT_FILE("../../fw/imem.vh"),
-        .MEM_SIZE_WORDS(5500/4),
+        .MEM_SIZE_WORDS(6000/4),
         .RANDOM_STALLS(1'b0)
     ) imem_inst (
         .clk(clk),
