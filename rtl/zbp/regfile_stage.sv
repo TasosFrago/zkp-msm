@@ -20,7 +20,10 @@ module regfile_stage
 
     // Detangle operands
     op_info_t rs1, rs2, rd;
+
     assign rs1 = dec_data.rs1;
+    assign rs2 = dec_data.rs2;
+    assign rd  = dec_data.rd;
 
     // assign rs2 = (~dec_data.rs2.is_imm) ? '{
     //         en: TRUE,
@@ -33,24 +36,24 @@ module regfile_stage
     //             (dec_data.rd_is_rs) ? '0 :
     //             dec_data.rd;
 
-    always_comb begin
-        if (~dec_data.rs2.is_imm) begin
-            rs2 = '{
-                en:    TRUE,
-                idx:   dec_data.rs2.val.as_r.idx,
-                is_bn: dec_data.rs2.val.as_r.is_bn
-            };
-            rd  = dec_data.rd;
-        end
-        else if (dec_data.rd_is_rs) begin
-            rs2 = dec_data.rd;
-            rd  = '0;
-        end
-        else begin
-            rs2 = '0;
-            rd  = dec_data.rd;
-        end
-    end
+    // always_comb begin
+    //     if (~dec_data.rs2.is_imm) begin
+    //         rs2 = '{
+    //             en:    TRUE,
+    //             idx:   dec_data.rs2.val.as_r.idx,
+    //             is_bn: dec_data.rs2.val.as_r.is_bn
+    //         };
+    //         rd  = dec_data.rd;
+    //     end
+    //     else if (dec_data.rd_is_rs) begin
+    //         rs2 = dec_data.rd;
+    //         rd  = '0;
+    //     end
+    //     else begin
+    //         rs2 = '0;
+    //         rd  = dec_data.rd;
+    //     end
+    // end
 
     typedef struct packed {
         logic [TID_W-1:0] tid;
@@ -62,7 +65,7 @@ module regfile_stage
         op_info_t rs1;
         op_info_t rs2;
 
-        logic rs2_is_imm;
+        logic imm_en;
         imm_t imm;
 
         logic was_stall;
@@ -160,8 +163,8 @@ module regfile_stage
                         hold.rd <= rd;
                         hold.rs1 <= rs1;
                         hold.rs2 <= rs2;
-                        hold.rs2_is_imm <= iss_if.data.rs2.is_imm;
-                        hold.imm <= iss_if.data.rs2.val.as_imm;
+                        hold.imm_en <= iss_if.data.rs3.is_imm & iss_if.data.rs3.en;
+                        hold.imm <= iss_if.data.rs3.val.as_imm;
                         hold.was_stall <= iss_if.data.read_stall;
 
                         `ifdef DEBUG
@@ -216,7 +219,7 @@ module regfile_stage
         eu_tag: hold.eu_tag,
         op_tag: hold.op_tag,
         rd: hold.rd,
-        rs2_is_imm: hold.rs2_is_imm,
+        imm_en: hold.imm_en,
         imm: hold.imm,
         rs1: rs1_val,
         rs2: rs2_val

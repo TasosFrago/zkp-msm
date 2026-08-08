@@ -42,9 +42,9 @@ module decode
         out_data.eu_tag   = EU_NOOP;
         out_data.op_tag   = OP_NONE;
         out_data.rs1      = OP_ZERO_REG;
-        out_data.rs2      = OP_RS2_ZERO_REG;
+        out_data.rs2      = OP_ZERO_REG;
+        out_data.rs3      = OP_RS3_ZERO_REG;
         out_data.rd       = OP_ZERO_REG;
-        out_data.rd_is_rs = FALSE;
         `ifdef DEBUG
         out_data.instr    = in_data.instr;
         `endif
@@ -59,15 +59,23 @@ module decode
                     is_bn: FALSE
                 };
 
+                out_data.rs2 = '{
+                    en:    TRUE,
+                    idx:   instr[24:20],
+                    is_bn: FALSE
+                };
+
                 out_data.rd = '{
                     en:    TRUE,
                     idx:   instr[11:7],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm         = FALSE;
-                out_data.rs2.val.as_r.idx   = instr[24:20];
-                out_data.rs2.val.as_r.is_bn = FALSE;
+                out_data.rs3.en = FALSE;
+
+                // out_data.rs2.is_imm         = FALSE;
+                // out_data.rs2.val.as_r.idx   = instr[24:20];
+                // out_data.rs2.val.as_r.is_bn = FALSE;
 
                 case (funct3)
                     F3_ADD_SUB: out_data.op_tag = (funct7 == F7_ALT) ? OP_SUB :
@@ -93,15 +101,22 @@ module decode
                     is_bn: FALSE
                 };
 
+                out_data.rs2.en = FALSE;
+
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                out_data.rs3.val.as_imm.bits = cimm_i;
+
                 out_data.rd = '{
                     en:    TRUE,
                     idx:   instr[11:7],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm      = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                out_data.rs2.val.as_imm.bits = cimm_i;
+                // out_data.rs2.is_imm      = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                // out_data.rs2.val.as_imm.bits = cimm_i;
 
                 case (funct3)
                     F3_ADD_SUB: out_data.op_tag = OP_ADD;
@@ -110,11 +125,11 @@ module decode
                         case (instr[31:25])
                             F7_BASE: begin
                                 out_data.op_tag = OP_SLL;
-                                out_data.rs2.val.as_imm.bits = { 15'b0, instr[24:20] };
+                                out_data.rs3.val.as_imm.bits = { 15'b0, instr[24:20] };
                             end
                             F7_ALT: begin
                                 out_data.op_tag = (instr[24:20] == 5'h01) ? OP_CTZ : OP_INVALID;
-                                out_data.rs2.val.as_imm.bits = '0;
+                                out_data.rs3.val.as_imm.bits = '0;
                             end
                             default: out_data.op_tag = OP_INVALID;
                         endcase
@@ -125,7 +140,7 @@ module decode
                     F3_XOR:     out_data.op_tag = OP_XOR;
                     F3_SRL_SRA: begin
                         out_data.op_tag = (funct7 == F7_ALT) ? OP_SRA : OP_SRL;
-                        out_data.rs2.val.as_imm.bits = { 15'b0, instr[24:20] };
+                        out_data.rs3.val.as_imm.bits = { 15'b0, instr[24:20] };
                     end
                     F3_OR:      out_data.op_tag = OP_OR;
                     F3_AND:     out_data.op_tag = OP_AND;
@@ -142,15 +157,22 @@ module decode
                     is_bn: FALSE
                 };
 
+                out_data.rs2.en = FALSE;
+
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                out_data.rs3.val.as_imm.bits = cimm_i;
+
                 out_data.rd = '{
                     en:    TRUE,
                     idx:   instr[11:7],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm          = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                out_data.rs2.val.as_imm.bits = cimm_i;
+                // out_data.rs2.is_imm          = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                // out_data.rs2.val.as_imm.bits = cimm_i;
 
                 case (funct3)
                     F3_BYTE:  out_data.op_tag = OP_LB;
@@ -171,17 +193,30 @@ module decode
                     is_bn: FALSE
                 };
 
-                // On the STORE instrs we repurpose rd to rs2 because rs2 holds imm
-                out_data.rd_is_rs = TRUE;
-                out_data.rd = '{
+                out_data.rs2 = '{
                     en:    TRUE,
                     idx:   instr[24:20],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm          = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                out_data.rs2.val.as_imm.bits = cimm_s;
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                out_data.rs3.val.as_imm.bits = cimm_s;
+
+                out_data.rd.en = FALSE;
+
+                // On the STORE instrs we repurpose rd to rs2 because rs2 holds imm
+                // out_data.rd_is_rs = TRUE;
+                // out_data.rd = '{
+                //     en:    TRUE,
+                //     idx:   instr[24:20],
+                //     is_bn: FALSE
+                // };
+
+                // out_data.rs2.is_imm          = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                // out_data.rs2.val.as_imm.bits = cimm_s;
 
                 case (funct3)
                     F3_BYTE:  out_data.op_tag = OP_SB;
@@ -200,16 +235,29 @@ module decode
                     is_bn: FALSE
                 };
 
-                out_data.rd_is_rs = TRUE;
-                out_data.rd = '{
+                out_data.rs2 = '{
                     en:    TRUE,
                     idx:   instr[24:20],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm      = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_J_B;
-                out_data.rs2.val.as_imm.bits = cimm_b;
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_J_B;
+                out_data.rs3.val.as_imm.bits = cimm_b;
+
+                out_data.rd.en = FALSE;
+
+                // out_data.rd_is_rs = TRUE;
+                // out_data.rd = '{
+                //     en:    TRUE,
+                //     idx:   instr[24:20],
+                //     is_bn: FALSE
+                // };
+
+                // out_data.rs2.is_imm      = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_J_B;
+                // out_data.rs2.val.as_imm.bits = cimm_b;
 
                 case (funct3)
                     F3_BEQ:  out_data.op_tag = OP_BEQ;
@@ -227,15 +275,22 @@ module decode
                 out_data.op_tag = OP_JAL;
 
                 out_data.rs1.en = FALSE;
+                out_data.rs2.en = FALSE;
+
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_J_B;
+                out_data.rs3.val.as_imm.bits = cimm_j;
+
                 out_data.rd = '{
                     en:    TRUE,
                     idx:   instr[11:7],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm          = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_J_B;
-                out_data.rs2.val.as_imm.bits = cimm_j;
+                // out_data.rs2.is_imm          = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_J_B;
+                // out_data.rs2.val.as_imm.bits = cimm_j;
             end
 
             OPCODE_JALR: begin
@@ -248,15 +303,22 @@ module decode
                     is_bn: FALSE
                 };
 
+                out_data.rs2.en = FALSE;
+
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                out_data.rs3.val.as_imm.bits = cimm_i;
+
                 out_data.rd = '{
                     en:    TRUE,
                     idx:   instr[11:7],
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm          = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                out_data.rs2.val.as_imm.bits = cimm_i;
+                // out_data.rs2.is_imm          = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                // out_data.rs2.val.as_imm.bits = cimm_i;
             end
 
             OPCODE_LUI: begin
@@ -264,6 +326,12 @@ module decode
                 out_data.op_tag = OP_LUI;
 
                 out_data.rs1.en = FALSE;
+                out_data.rs2.en = FALSE;
+
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_U;
+                out_data.rs3.val.as_imm.bits = cimm_u;
 
                 out_data.rd = '{
                     en:    TRUE,
@@ -271,9 +339,9 @@ module decode
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm          = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_U;
-                out_data.rs2.val.as_imm.bits = cimm_u;
+                // out_data.rs2.is_imm          = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_U;
+                // out_data.rs2.val.as_imm.bits = cimm_u;
             end
 
             OPCODE_AUIPC: begin
@@ -281,6 +349,12 @@ module decode
                 out_data.op_tag = OP_AUIPC;
 
                 out_data.rs1.en = FALSE;
+                out_data.rs2.en = FALSE;
+
+                out_data.rs3.en              = TRUE;
+                out_data.rs3.is_imm          = TRUE;
+                out_data.rs3.val.as_imm.fmt  = IMM_U;
+                out_data.rs3.val.as_imm.bits = cimm_u;
 
                 out_data.rd = '{
                     en:    TRUE,
@@ -288,9 +362,9 @@ module decode
                     is_bn: FALSE
                 };
 
-                out_data.rs2.is_imm          = TRUE;
-                out_data.rs2.val.as_imm.fmt  = IMM_U;
-                out_data.rs2.val.as_imm.bits = cimm_u;
+                // out_data.rs2.is_imm          = TRUE;
+                // out_data.rs2.val.as_imm.fmt  = IMM_U;
+                // out_data.rs2.val.as_imm.bits = cimm_u;
             end
 
             OPCODE_SYSTEM: begin
@@ -305,15 +379,23 @@ module decode
                     is_bn: TRUE
                 };
 
+                out_data.rs2 = '{
+                    en:    TRUE,
+                    idx:   instr[24:20],
+                    is_bn: TRUE
+                };
+
+                out_data.rs3.en = FALSE;
+
                 out_data.rd = '{
                     en:    TRUE,
                     idx:   instr[11:7],
                     is_bn: TRUE
                 };
 
-                out_data.rs2.is_imm        = FALSE;
-                out_data.rs2.val.as_r.idx  = instr[24:20];
-                out_data.rs2.val.as_r.is_bn = TRUE;
+                // out_data.rs2.is_imm        = FALSE;
+                // out_data.rs2.val.as_r.idx  = instr[24:20];
+                // out_data.rs2.val.as_r.is_bn = TRUE;
 
                 case (funct3)
                     F3_BADD_BSUB: begin
@@ -336,7 +418,7 @@ module decode
                             F7_BSHFL: begin
                                 out_data.eu_tag = EU_BALU;
                                 out_data.op_tag = OP_BSHFL;
-                                out_data.rs2.val.as_r.is_bn = FALSE;
+                                out_data.rs2.is_bn = FALSE;
                             end
 
                             F7_BMSUB: begin
@@ -381,15 +463,22 @@ module decode
                             is_bn: FALSE
                         };
 
+                        out_data.rs2.en = FALSE;
+
+                        out_data.rs3.en              = TRUE;
+                        out_data.rs3.is_imm          = TRUE;
+                        out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs3.val.as_imm.bits = cimm_i;
+
                         out_data.rd = '{
                             en:   TRUE,
                             idx:  instr[11:7],
                             is_bn: TRUE
                         };
 
-                        out_data.rs2.is_imm          = TRUE;
-                        out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                        out_data.rs2.val.as_imm.bits = cimm_i;
+                        // out_data.rs2.is_imm          = TRUE;
+                        // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                        // out_data.rs2.val.as_imm.bits = cimm_i;
                     end
 
                     F3_STOREBN: begin
@@ -402,38 +491,89 @@ module decode
                             is_bn: FALSE
                         };
 
-                        out_data.rd_is_rs = TRUE;
-                        out_data.rd = '{
+                        out_data.rs2 = '{
                             en:    TRUE,
                             idx:   instr[24:20],
                             is_bn: TRUE
                         };
 
-                        out_data.rs2.is_imm          = TRUE;
-                        out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                        out_data.rs2.val.as_imm.bits = cimm_s;
+                        out_data.rs3.en              = TRUE;
+                        out_data.rs3.is_imm          = TRUE;
+                        out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs3.val.as_imm.bits = cimm_s;
+
+                        out_data.rd.en = FALSE;
+
+                        // out_data.rd_is_rs = TRUE;
+                        // out_data.rd = '{
+                        //     en:    TRUE,
+                        //     idx:   instr[24:20],
+                        //     is_bn: TRUE
+                        // };
+
+                        // out_data.rs2.is_imm          = TRUE;
+                        // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                        // out_data.rs2.val.as_imm.bits = cimm_s;
                     end
 
                     F3_SYNCBAR: begin
                         out_data.eu_tag = EU_CF;
                         out_data.op_tag = OP_SYNC;
 
+                        // out_data.rs1 = '{
+                        //     en:    FALSE,
+                        //     idx:   instr[19:15],
+                        //     is_bn: FALSE
+                        // };
+
+                        out_data.rs1.en = FALSE;
+                        out_data.rs2.en = FALSE;
+
+                        out_data.rs3.en              = TRUE;
+                        out_data.rs3.is_imm          = TRUE;
+                        out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs3.val.as_imm.bits = cimm_i;
+
+                        out_data.rd.en = FALSE;
+
+                        // out_data.rd_is_rs = FALSE;
+                        // out_data.rd = '{
+                        //     en:    FALSE,
+                        //     idx:   instr[11:7],
+                        //     is_bn: FALSE
+                        // };
+
+                        // out_data.rs2.is_imm          = TRUE;
+                        // out_data.rs2.val.as_imm.fmt  = IMM_I_S;
+                        // out_data.rs2.val.as_imm.bits = cimm_i;
+                    end
+
+                    F3_BEXT_W: begin
+                        out_data.eu_tag = EU_BWALU;
+                        out_data.op_tag = OP_BEXT_W;
+
                         out_data.rs1 = '{
-                            en:    FALSE,
+                            en:    TRUE,
                             idx:   instr[19:15],
+                            is_bn: TRUE
+                        };
+
+                        out_data.rs2 = '{
+                            en:    TRUE,
+                            idx:   instr[24:20],
                             is_bn: FALSE
                         };
 
-                        out_data.rd_is_rs = FALSE;
+                        out_data.rs3.en              = TRUE;
+                        out_data.rs3.is_imm          = TRUE;
+                        out_data.rs3.val.as_imm.fmt  = IMM_I_S;
+                        out_data.rs3.val.as_imm.bits = { 15'h0, instr[31:27] };
+
                         out_data.rd = '{
-                            en:    FALSE,
+                            en:    TRUE,
                             idx:   instr[11:7],
                             is_bn: FALSE
                         };
-
-                        out_data.rs2.is_imm          = TRUE;
-                        out_data.rs2.val.as_imm.fmt  = IMM_I_S;
-                        out_data.rs2.val.as_imm.bits = cimm_i;
                     end
 
                     default: begin

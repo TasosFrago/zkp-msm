@@ -29,6 +29,8 @@ module scoreboard
     op_info_t rs1, rs2, rd;
 
     assign rs1 = dec_data.rs1;
+    assign rs2 = dec_data.rs2;
+    assign rd  = dec_data.rd;
 
     // assign rs2 = (~dec_data.rs2.is_imm) ? '{
     //         en: TRUE,
@@ -41,24 +43,24 @@ module scoreboard
     //             (dec_data.rd_is_rs) ? '0 :
     //             dec_data.rd;
 
-    always_comb begin
-        if (~dec_data.rs2.is_imm) begin
-            rs2 = '{
-                en:    TRUE,
-                idx:   dec_data.rs2.val.as_r.idx,
-                is_bn: dec_data.rs2.val.as_r.is_bn
-            };
-            rd  = dec_data.rd;
-        end
-        else if (dec_data.rd_is_rs) begin
-            rs2 = dec_data.rd;
-            rd  = '0;
-        end
-        else begin
-            rs2 = '0;
-            rd  = dec_data.rd;
-        end
-    end
+    // always_comb begin
+    //     if (~dec_data.rs2.is_imm) begin
+    //         rs2 = '{
+    //             en:    TRUE,
+    //             idx:   dec_data.rs2.val.as_r.idx,
+    //             is_bn: dec_data.rs2.val.as_r.is_bn
+    //         };
+    //         rd  = dec_data.rd;
+    //     end
+    //     else if (dec_data.rd_is_rs) begin
+    //         rs2 = dec_data.rd;
+    //         rd  = '0;
+    //     end
+    //     else begin
+    //         rs2 = '0;
+    //         rd  = dec_data.rd;
+    //     end
+    // end
 
     function automatic logic bget_rdy( input logic [4:0] reg_idx, input logic [TID_W-1:0] t);
         if (reg_idx == ZERO_REG) return 1'b1;
@@ -146,8 +148,8 @@ module scoreboard
         op_tag:      dec_data.op_tag,
         rs1:         dec_data.rs1,
         rs2:         dec_data.rs2,
+        rs3:         dec_data.rs3,
         rd:          dec_data.rd,
-        rd_is_rs:    dec_data.rd_is_rs,
         read_stall:  read_stall,
         bshfl_stall: bshfl_stall
 

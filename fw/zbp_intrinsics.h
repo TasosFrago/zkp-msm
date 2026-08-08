@@ -11,16 +11,33 @@ typedef unsigned short u16;
 typedef signed int   i32;
 typedef unsigned int u32;
 
-typedef struct {
-	u32 w[8];
-} __attribute__((aligned(32))) u256;
+#ifndef __riscv_xzkp256b
+#define __riscv_xzkp256b
+#endif
 
-typedef u32 bgn __attribute__((vector_size(32), aligned(4)));
-
-typedef union {
-	u32 w[8];
-	bgn v;
-} ubgn;
+#ifdef __riscv_xzkp256b
+	#define MODEMODE_256B
+	#define BGN_BYTES 32
+	#define BGN_WORDS 8
+	#define BGN_SHIFT 5
+	typedef u32 bgn __attribute__((vector_size(BGN_BYTES), aligned(4)));
+	typedef union {
+		u32 w[BGN_WORDS];
+		bgn v;
+	} ubgn;
+#elif defined(__riscv_xzkp128b)
+	#define MODEMODE_128B
+	#define BGN_BYTES 16
+	#define BGN_WORDS 4
+	#define BGN_SHIFT 4
+	typedef u32 bgn __attribute__((vector_size(BGN_BYTES), aligned(4)));
+	typedef union {
+		u32 w[BGN_WORDS];
+		bgn v;
+	} ubgn;
+#else
+#error "XZkp extention (128b or 256b) not specified in -march"
+#endif
 
 typedef volatile i8  vi8;
 typedef volatile u8  vu8;
@@ -36,22 +53,22 @@ void *memset(void *dest, int val, unsigned int len)
 	unsigned char *ptr = dest;
 	unsigned char fill = (unsigned char)val;
 
-	if (len >= 32) {
+	if (len >= BGN_BYTES) {
 		u32 word = ((u32)fill << 24) | ((u32)fill << 16) |
 		           ((u32)fill << 8)  |  (u32)fill;
 		bgn pattern;
 		u32 *pw = (u32 *)&pattern;
-		for (int i = 0; i < 8; i++) {
+		for (int i = 0; i < BGN_WORDS; i++) {
 			pw[i] = word;
 		}
 
 		bgn *bp = (bgn *)ptr;
-		unsigned int chunks = len >> 5;
+		unsigned int chunks = len >> BGN_SHIFT;
 		while (chunks--) {
 			*bp++ = pattern;
 		}
 		ptr = (unsigned char *)bp;
-		len &= 31;
+		len &= (BGN_BYTES - 1);
 	}
 
 	while (len-- > 0) {
@@ -65,16 +82,16 @@ void *memcpy(void *dest, const void *src, unsigned int len)
 	unsigned char *d = dest;
 	const unsigned char *s = src;
 
-	if (len >= 32) {
+	if (len >= BGN_BYTES) {
 		bgn *bd = (bgn *)d;
 		const bgn *bs = (const bgn *)s;
-		unsigned int chunks = len >> 5;
+		unsigned int chunks = len >> BGN_SHIFT;
 		while (chunks--) {
 			*bd++ = *bs++;
 		}
 		d = (unsigned char *)bd;
 		s = (const unsigned char *)bs;
-		len &= 31;
+		len &= (BGN_BYTES - 1);
 	}
 
 	while (len-- > 0) {
@@ -178,24 +195,21 @@ static inline __attribute__((always_inline)) void zbp_sv(u256 *ptr, u32 v_handle
 
 #else
 
-#define builtin_fn(name) \
-	extern bgn __builtin_riscv_zkp_##name(bgn, bgn)
-
-builtin_fn(bmmul);
-builtin_fn(bmadd);
-builtin_fn(bmsub);
-
-extern void __builtin_riscv_zkp_sync_barrier(const int);
+#ifdef __riscv_xzkp256b
+#define ZKP_BUILTIN(name) __builtin_riscv_zkp_##name
+#else
+#define ZKP_BUILTIN(name) __builtin_riscv_zkp_##name##128
+#endif
 
 
 static inline __attribute__((always_inline)) bgn zbp_bmadd(bgn a, bgn b)
 {
-	return __builtin_riscv_zkp_bmadd(a, b);
+	return ZKP_BUILTIN(bmadd)(a, b);
 }
 
 static inline __attribute__((always_inline)) bgn zbp_bmsub(bgn a, bgn b)
 {
-	return __builtin_riscv_zkp_bmsub(a, b);
+	return ZKP_BUILTIN(bmsub)(a, b);
 }
 
 static inline __attribute__((always_inline)) bgn zbp_reduce(bgn a)
@@ -204,18 +218,28 @@ static inline __attribute__((always_inline)) bgn zbp_reduce(bgn a)
 	#pragma clang diagnostic ignored "-Wuninitialized"
 	register bgn zero_val __asm__("b0");
 	__asm__ volatile ("" : "=r" (zero_val));
-	return __builtin_riscv_zkp_bmadd(a, zero_val);
+	return ZKP_BUILTIN(bmadd)(a, zero_val);
 	#pragma clang diagnostic pop
 }
 
 static inline __attribute__((always_inline)) bgn zbp_bmmul(bgn a, bgn b)
 {
-	return zbp_reduce(__builtin_riscv_zkp_bmmul(a, b));
+	return zbp_reduce(ZKP_BUILTIN(bmmul)(a, b));
+}
+
+static inline __attribute__((always_inline)) bgn zbp_bmmul_nr(bgn a, bgn b)
+{
+	return ZKP_BUILTIN(bmmul)(a, b);
 }
 
 static inline __attribute__((always_inline)) void zbp_sync_barrier(void)
 {
 	__builtin_riscv_zkp_sync_barrier(0);
+}
+
+static inline __attribute__((always_inline)) u32 zbp_bext_w(bgn val, i32 window_idx, const u32 window_width)
+{
+	return ZKP_BUILTIN(bext_w)(val, window_idx, window_width);
 }
 
 static inline __attribute__((always_inline)) i32 zbp_ctz(u32 mask)

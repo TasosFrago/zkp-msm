@@ -104,8 +104,10 @@ $(BUILD_DIR)/V$(TOP_MOD): $(HDL_SRCS) $(TB_SRC) $(FW_TARGET)
 	@DMEM_SIZE=$$(awk -F'=' '/DMEM_SIZE_DEC/ {print $$2}' $(FW_PARAMS)); \
 	INPUTS_ADDR=$$(awk -F'=' '/INPUTS_BASE_HEX/ {print $$2}' $(FW_PARAMS)); \
 	echo -e "\033[0;36m[VERILATOR] Injecting DMEM_SIZE_BYTES=$$DMEM_SIZE \033[0m"; \
+	echo -e "\033[0;36m[VERILATOR] Injecting INPUTS_BASE_HEX=$$INPUTS_ADDR \033[0m"; \
 	CXX=$(CXX) $(VERILATOR) $(V_FLAGS) \
 		-GMEM_SIZE_BYTES=$$DMEM_SIZE \
+		-CFLAGS "-DINPUTS_BASE_HEX=0x$$INPUTS_ADDR" \
 		$(HDL_SRCS) $(TB_SRC)
 
 run: sim
@@ -113,9 +115,10 @@ run: sim
 	@mkdir -p $(BUILD_DIR)/traces
 	@mkdir -p $(BUILD_DIR)/dbg_logs
 	@cd $(BUILD_DIR) && /usr/bin/time -f "$(TIME_FMT)" ./V$(TOP_MOD) \
-		+MEM_FILE=$(abspath $(FW_TARGET)) \
-		+DBG_PROBE
-
+		+MEM_FILE=$(abspath $(FW_TARGET))
+#
+		# +DBG_PROBE
+		# +NO_FETCH_TRACE
 	@echo -e "\n\033[0;36m[SIM] Checking Register Dump (First 16 lines):\033[0m"
 	@head -n 16 $(BUILD_DIR)/scalar_regs_dump.txt || true
 

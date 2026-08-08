@@ -17,12 +17,14 @@ module exu
     logic memory_stall;
     logic wb_fifo_full;
     logic salu_ready, salu_can_output;
+    logic bwalu_ready, bwalu_can_output;
     logic cfu_ready;
     logic write_collision;
 
     assign exec_if.ready = ~memory_stall & ~wb_fifo_full &
         (((exec_if.data.eu_tag == EU_SALU)  ? salu_ready :
           (exec_if.data.eu_tag == EU_CF)    ? cfu_ready :
+          (exec_if.data.eu_tag == EU_BWALU) ? bwalu_ready :
           (exec_if.data.eu_tag == EU_BMMUL) ? ~write_collision :
           (exec_if.data.eu_tag == EU_BMADD) ? ~write_collision :
           (exec_if.data.eu_tag == EU_BALU)  ? ~write_collision :
@@ -135,6 +137,35 @@ module exu
 
     // BCMP
 
+    // BWALU
+    swb_t wbS_bwalu_out;
+
+    logic bwalu_fired, bwalu_valid_in, bwalu_valid_out;
+
+    assign bwalu_valid_in = exec_if.valid &
+                    (exec_if.data.eu_tag == EU_BWALU) &
+                    exec_if.data.rd.en;
+
+    assign bwalu_fired = bwalu_valid_in & bwalu_ready;
+
+    bwalu bwalu_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .valid_in(bwalu_valid_in),
+        .ready_in(bwalu_ready),
+        .tid(exec_if.data.tid),
+        .rd(exec_if.data.rd.idx),
+        .op_tag(exec_if.data.op_tag),
+        .opa(exec_if.data.rs1),
+        .opb(exec_if.data.rs2),
+        .imm_val(imm_val),
+
+        .valid_out(bwalu_valid_out),
+        .ready_out(bwalu_can_output),
+        .res(wbS_bwalu_out)
+    );
+
     // SALU
     swb_t wbS_salu_out;
 
@@ -152,7 +183,7 @@ module exu
         exec_if.data.pc :
         exec_if.data.rs1[31:0];
 
-    assign alu_opb = (exec_if.data.rs2_is_imm) ?
+    assign alu_opb = (exec_if.data.imm_en) ?
         imm_val :
         exec_if.data.rs2[31:0];
 
@@ -319,24 +350,25 @@ module exu
     swb_t wb_fifo_din;
     swb_t wb_fifo_dout;
 
-    logic salu_has_wb, cfu_has_wb;
-    assign salu_has_wb = salu_valid_out & wbS_salu_out.tag.en;
-    assign cfu_has_wb  = cfu_out_if.valid & wbS_cfu_out.tag.en;
+    logic salu_has_wb, bwalu_has_wb, cfu_has_wb;
+    assign salu_has_wb  = salu_valid_out & wbS_salu_out.tag.en;
+    assign cfu_has_wb   = cfu_out_if.valid & wbS_cfu_out.tag.en;
+    assign bwalu_has_wb = bwalu_valid_out & wbS_bwalu_out.tag.en;
 
     // Incoming wb data from scalar units
     logic wb_incoming_d;
-    assign wb_incoming_d = salu_has_wb | cfu_has_wb;
+    assign wb_incoming_d = salu_has_wb | cfu_has_wb | bwalu_has_wb;
 
     // CFU & SALU Ready_out signals
-    assign salu_can_output = ~salu_has_wb | ~wb_fifo_full;
-    assign cfu_out_if.ready = ~cfu_has_wb | (~salu_has_wb & ~wb_fifo_full);
+    assign salu_can_output  = ~salu_has_wb | ~wb_fifo_full;
+    assign bwalu_can_output = ~bwalu_has_wb | (~salu_has_wb & ~wb_fifo_full);
+    assign cfu_out_if.ready = ~cfu_has_wb | (~salu_has_wb & ~bwalu_has_wb & ~wb_fifo_full);
 
     assign wb_fifo_din =
-        salu_has_wb ?
-            wbS_salu_out :
-        cfu_has_wb ?
-            wbS_cfu_out :
-            '0;
+        salu_has_wb  ? wbS_salu_out :
+        bwalu_has_wb ? wbS_bwalu_out :
+        cfu_has_wb   ? wbS_cfu_out :
+        '0;
 
     assign wb_fifo_push = wb_incoming_d & (wbS_lsu_out.tag.en | ~wb_fifo_empty) & ~wb_fifo_full;
     assign wb_fifo_pop =  ~wbS_lsu_out.tag.en & ~wb_fifo_empty;

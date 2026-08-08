@@ -15,7 +15,6 @@ module balu
     output bwb_t wbBN
 );
 
-    wb_tag_t wb_tag = '{en: valid_in, tid: tid, rd: rd};
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -35,7 +34,7 @@ module balu
                     valid_out <= valid_in;
                     wbBN <= '{
                         tag: '{en: valid_in, tid: tid, rd: rd},
-                        data: { 8{32'haadbeef} }
+                        data: { CHUNKS{32'haadbeef} }
                     };
                 end
             endcase

@@ -60,6 +60,7 @@ package zbp_pkg;
         EU_BMADD,
         EU_BMMUL,
         EU_BALU,
+        EU_BWALU,
         EU_BCMP,
         EU_LSU,
         EU_SALU,
@@ -126,6 +127,7 @@ package zbp_pkg;
         OP_BMV,
         OP_BSHFL,
         OP_BSHFLI,
+        OP_BEXT_W,
 
         OP_SYNC,
 
@@ -148,17 +150,18 @@ package zbp_pkg;
         logic [$bits(imm_t) - R_IDX_W - 1 - 1:0] _pad;
         logic [R_IDX_W-1:0] idx;
         logic is_bn;
-    } rs2_op_t;
+    } rs_op_t;
 
     typedef union packed {
         imm_t as_imm;
-        rs2_op_t as_r;
-    } rs2_val_t;
+        rs_op_t as_r;
+    } urs_imm_t;
 
     typedef struct packed {
+        logic en;
         logic is_imm;
-        rs2_val_t val;
-    } rs2_t;
+        urs_imm_t val;
+    } rs_t;
 
     typedef struct packed {
         logic en;
@@ -173,9 +176,9 @@ package zbp_pkg;
         op_tag_t op_tag;
 
         op_info_t rs1;
-        rs2_t     rs2;
+        op_info_t rs2;
+        rs_t      rs3;
         op_info_t rd;
-        logic     rd_is_rs;
 
         `ifdef DEBUG
         logic [31:0] instr;
@@ -195,9 +198,9 @@ package zbp_pkg;
         op_tag_t op_tag;
 
         op_info_t rs1;
-        rs2_t     rs2;
+        op_info_t rs2;
+        rs_t      rs3;
         op_info_t rd;
-        logic     rd_is_rs;
 
         logic read_stall;
         logic bshfl_stall;
@@ -245,7 +248,7 @@ package zbp_pkg;
 
         op_info_t rd;
 
-        logic rs2_is_imm;
+        logic imm_en;
         imm_t imm;
 
         logic [NUMBER_SIZE-1:0] rs1;
@@ -279,9 +282,10 @@ package zbp_pkg;
         idx: '0,
         is_bn: FALSE
     };
-    localparam rs2_t OP_RS2_ZERO_REG = '{
+    localparam rs_t OP_RS3_ZERO_REG = '{
+        en: TRUE,
         is_imm: FALSE,
-        val: rs2_val_t'(rs2_op_t'{
+        val: rs_op_t'(rs_op_t'{
                 _pad: '0,
                 idx:  '0,
                 is_bn: FALSE

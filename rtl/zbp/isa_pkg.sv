@@ -57,7 +57,8 @@ package isa_pkg;
     typedef enum logic [3-1:0] {
         F3_LOADBN  = 3'h0,
         F3_STOREBN = 3'h1,
-        F3_SYNCBAR = 3'h2
+        F3_SYNCBAR = 3'h2,
+        F3_BEXT_W  = 3'h3
     } funct3_blsu_t;
 
     typedef enum logic [7-1:0] {

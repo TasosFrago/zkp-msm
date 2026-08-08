@@ -239,6 +239,34 @@ auto generate_msm_data(
 	return std::pair{ points, scalars };
 }
 
+int inputs_base_extract(std::string_view &file)
+{
+	std::unique_ptr<FILE, decltype(&std::fclose)> fp(
+		std::fopen(std::string(file).c_str(), "r"),
+		&std::fclose
+	);
+
+	if (!fp) {
+		return -1;
+	}
+
+	char line[512];
+	const char *target = "INPUTS_BASE_HEX=";
+	size_t target_len = std::strlen(target);
+
+	while(std::fgets(line, sizeof(line), fp.get())) {
+		if(const char *match = std::strstr(line, target)) {
+			const char *value_start = match + target_len;
+			try {
+				return std::stoi(value_start, nullptr, 16);
+			} catch(...) {
+				return -2;
+			}
+		}
+	}
+	return -2;
+}
+
 
 int main(int argc, char **argv)
 {
@@ -291,8 +319,10 @@ int main(int argc, char **argv)
 	tick();
 	dut->rst = 0;
 
-	constexpr size_t MSM_SIZE = 2;
-	constexpr size_t POINTS_STRUCT_ADDR = 0x44000;
+	constexpr size_t MSM_SIZE = 64;
+	// constexpr size_t POINTS_STRUCT_ADDR = 0x44000;
+	assert(INPUTS_BASE_HEX != 0);
+	constexpr size_t POINTS_STRUCT_ADDR = INPUTS_BASE_HEX;
 	constexpr size_t SCALARS_STRUCT_ADDR = POINTS_STRUCT_ADDR + 4 + (64 * (4 * (256/8)));
 	std::println("POINTS_STRUCT_ADDR = 0x{:X}", POINTS_STRUCT_ADDR);
 	std::println("SCALARS_STRUCT_ADDR = 0x{:X}", SCALARS_STRUCT_ADDR);

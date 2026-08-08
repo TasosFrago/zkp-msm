@@ -48,6 +48,14 @@ void mont_trans_back_points_mt(const point_arr_t *P, point_arr_t *Pm);
 void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i32 *out_valid);
 void msm_singleThreaded(const point_arr_t *points, const scalar_arr_t *scalars);
 
+static inline void pointcpy(xyzz_t *dst, const xyzz_t *src)
+{
+	dst->x = src->x;
+	dst->y = src->y;
+	dst->zz = src->zz;
+	dst->zzz = src->zzz;
+}
+
 static volatile xyzz_t partial_res[NUM_THREADS];
 static volatile u32 partial_valid[NUM_THREADS];
 static volatile u32 partial_done[NUM_THREADS];
@@ -76,7 +84,8 @@ int main()
 
 	msm(pt_arr, sc_arr, &partial, &partial_ok);
 
-	partial_res[get_tid()] = partial;
+	// partial_res[get_tid()] = partial;
+	pointcpy((xyzz_t *)&partial_res[get_tid()], &partial);
 	partial_valid[get_tid()] = (u32)partial_ok;
 	partial_done[get_tid()] = 1;
 
@@ -90,16 +99,19 @@ int main()
 			if(!partial_valid[t]) {
 				continue;
 			}
-			xyzz_t tmp = (xyzz_t)partial_res[t];
+			// xyzz_t tmp = (xyzz_t)partial_res[t];
 			if(!Q_valid) {
-				Q = tmp;
+				// Q = tmp;
+				pointcpy(&Q, (const xyzz_t *)&partial_res[t]);
 				Q_valid = 1;
 			} else {
-				ecc_padd(&Q, &tmp, &Q);
+				// ecc_padd(&Q, &tmp, &Q);
+				ecc_padd(&Q, (const xyzz_t *)&partial_res[t], &Q);
 			}
 		}
 	}
-	RES[0] = (Q_valid) ? Q : (xyzz_t){0};
+	if (Q_valid) pointcpy((xyzz_t *)&RES[0], &Q);
+	// RES[0] = (Q_valid) ? Q : (xyzz_t){0};
 
 	RES[0].x   = mont_trans_back((const bgn *)&RES[0].x);
 	RES[0].y   = mont_trans_back((const bgn *)&RES[0].y);
@@ -128,9 +140,12 @@ static inline u32 get_window(const bgn *scalar, i32 window_idx)
 	// u32 windows_per_word = 32 / WINDOW_BITS;
 	// u32 word_idx = (u32)window_idx / windows_per_word;
 	// u32 bit_off = ((u32)window_idx % windows_per_word) * WINDOW_BITS;
-	u32 word_idx = (u32)window_idx >> 3;
-	u32 bit_off = ((u32)window_idx & 7) * WINDOW_BITS;
-	return ((*scalar)[word_idx] >> bit_off) & (BUCKETS - 1);
+	
+	// u32 word_idx = (u32)window_idx >> 3;
+	// u32 bit_off = ((u32)window_idx & 7) * WINDOW_BITS;
+	// return ((*scalar)[word_idx] >> bit_off) & (BUCKETS - 1);
+
+	return zbp_bext_w(*scalar, window_idx, (WINDOW_BITS - 1));
 }
 
 void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i32 *out_valid)
@@ -141,30 +156,35 @@ void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i3
 	get_thread_range(points->size, tid, &start, &count);
 
 	static xyzz_t buckets[NUM_THREADS][BUCKETS];
-	static u32 bucket_valid[NUM_THREADS][BUCKETS];
+	static u8 bucket_valid[NUM_THREADS][BUCKETS];
 
 	xyzz_t Q;
 	i32 Q_valid = 0;
 
 	for(i32 w = WINDOWS - 1; w >= 0; w--) {
 
-		for(i32 b = 1; b < BUCKETS; b++) {
-			bucket_valid[tid][b] = 0;
-		}
+		// for(i32 b = 1; b < BUCKETS; b++) {
+		// 	bucket_valid[tid][b] = 0;
+		// }
 
 		for(u32 i = start; i < start + count; i++) {
 			u32 digit = get_window(&scalars->scalars[i], w);
 
-			if(digit == 0) {
-				continue;
-			}
+			if(digit == 0) continue;
 
-			if(!bucket_valid[tid][digit]) {
-				buckets[tid][digit] = points->points[i];
-				bucket_valid[tid][digit] = 1;
+			if(bucket_valid[tid][digit] != (w + 1)) {
+				// buckets[tid][digit] = points->points[i];
+				pointcpy(&buckets[tid][digit], &points->points[i]);
+				bucket_valid[tid][digit] = (w + 1);
 			} else {
 				ecc_padd(&buckets[tid][digit], &points->points[i], &buckets[tid][digit]);
 			}
+			// if(!bucket_valid[tid][digit]) {
+			// 	buckets[tid][digit] = points->points[i];
+			// 	bucket_valid[tid][digit] = 1;
+			// } else {
+			// 	ecc_padd(&buckets[tid][digit], &points->points[i], &buckets[tid][digit]);
+			// }
 		}
 
 		xyzz_t running_sum, window_total;
@@ -173,9 +193,10 @@ void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i3
 		i32 window_is_exact_cpy = 0;
 
 		for(i32 b = BUCKETS - 1; b >= 1; b--) {
-			if(bucket_valid[tid][b]) {
+			if(bucket_valid[tid][b] == (w + 1)) {
 				if(!running_valid) {
-					running_sum = buckets[tid][b];
+					// running_sum = buckets[tid][b];
+					pointcpy(&running_sum, &buckets[tid][b]);
 					running_valid = 1;
 				} else {
 					ecc_padd(&running_sum, &buckets[tid][b], &running_sum);
@@ -185,7 +206,8 @@ void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i3
 
 			if(running_valid) {
 				if(!total_valid) {
-					window_total = running_sum;
+					// window_total = running_sum;
+					pointcpy(&window_total, &running_sum);
 					total_valid = 1;
 					window_is_exact_cpy = 1;
 				} else {
@@ -206,7 +228,8 @@ void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i3
 		}
 		if(total_valid) {
 			if(!Q_valid) {
-				Q = window_total;
+				// Q = window_total;
+				pointcpy(&Q, &window_total);
 				Q_valid = 1;
 			} else {
 				ecc_padd(&Q, &window_total, &Q);
@@ -214,7 +237,10 @@ void msm(const point_arr_t *points, const scalar_arr_t *scalars, xyzz_t *out, i3
 		}
 	}
 
-	*out = (Q_valid) ? Q : (xyzz_t){0};
+	// *out = (Q_valid) ? Q : (xyzz_t){0};
+	if(Q_valid) {
+		*out = Q;
+	}
 	*out_valid = Q_valid;
 }
 

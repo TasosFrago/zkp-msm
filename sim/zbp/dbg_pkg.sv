@@ -90,12 +90,14 @@ package dbg_pkg;
 
     class FetchMonitor;
         virtual dbg_fetch_trace_if vif;
+        longint cycle_count;
 
         local int fd_trace[MAX_THREADS];
         local logic [31:0] in_flight_instr[MAX_THREADS];
 
         function new(virtual dbg_fetch_trace_if vif, string dir_path = ".");
             this.vif = vif;
+            this.cycle_count = 0;
 
             if (dir_path.len() > 0 && dir_path[dir_path.len()-1] != "/") begin
                 dir_path = { dir_path, "/" };
@@ -123,6 +125,7 @@ package dbg_pkg;
                 @(vif.cb);
 
                 if (~vif.cb.rst) begin
+                    cycle_count++;
 
                     if (vif.cb.fetch_valid && vif.cb.fetch_ready) begin
                         in_flight_instr[vif.cb.fetch_tid] = vif.cb.fetch_instr;
@@ -131,14 +134,17 @@ package dbg_pkg;
                     for(int t = 0; t < MAX_THREADS; t++) begin
                         /* verilator lint_off WIDTHEXPAND */
                         if (vif.cb.cf_redirect.vld && (vif.cb.cf_redirect.tid == t)) begin
-                            $fdisplay(fd_trace[t], "0x%08X | 0x%08X  <--- [REDIRECT to 0x%08X] | %s  // @[%t]",
-                                vif.cb.pc_tb[t], in_flight_instr[t], vif.cb.cf_redirect.pc,
-                                decode_riscv(in_flight_instr[t]), $time);
+                            $fdisplay(fd_trace[t], "0x%08X  <--- [REDIRECT to 0x%08X] |  0x%08X  | %s | // @[%0t] [%0d c]",
+                                vif.cb.pc_tb[t], vif.cb.cf_redirect.pc,
+                                in_flight_instr[t],
+                                decode_riscv(in_flight_instr[t]),
+                                $time, cycle_count);
                         end
                         else if (vif.cb.cf_pc_adv.vld && (vif.cb.cf_pc_adv.tid == t)) begin
-                            $fdisplay(fd_trace[t], "0x%08X | 0x%08X  | %s  // @[%t]",
+                            $fdisplay(fd_trace[t], "0x%08X | 0x%08X  | %s | // @[%0t] [%0d c]",
                                 vif.cb.pc_tb[t], in_flight_instr[t],
-                                decode_riscv(in_flight_instr[t]), $time);
+                                decode_riscv(in_flight_instr[t]),
+                                $time, cycle_count);
                         end
                         /* verilator lint_on WIDTHEXPAND */
                     end
@@ -434,26 +440,26 @@ package dbg_pkg;
                     (scb_operand1_rdy ? "READY" : "NOT READY")
                 ) : "";
 
-            string rs2 =
-                (dec_to_scb.rd_is_rs && dec_to_scb.rd.en) ? $sformatf(
+            string rs2 = dec_to_scb.rs2.en ? $sformatf(
                     "             RS2: idx( %s%0d ), %s\n",
-                    (dec_to_scb.rd.is_bn ? "b" : "x"),
-                    dec_to_scb.rd.idx,
+                    (dec_to_scb.rs2.is_bn ? "b" : "x"),
+                    dec_to_scb.rs2.idx,
                     (scb_operand2_rdy ? "READY" : "NOT READY")
-                ) :
-                !dec_to_scb.rs2.is_imm ? $sformatf(
-                    "             RS2: idx( %s%0d ), %s\n",
-                    (dec_to_scb.rs2.val.as_r.is_bn ? "b" : "x"),
-                    dec_to_scb.rs2.val.as_r.idx,
-                    (scb_operand2_rdy ? "READY" : "NOT READY")
-                ) :
-                $sformatf(
-                    "             IMM: %s, 0x%0X\n",
-                    dec_to_scb.rs2.val.as_imm.fmt.name(),
-                    dec_to_scb.rs2.val.as_imm.bits,
-                );
+                ) : "";
 
-            string rd = (!dec_to_scb.rd_is_rs && dec_to_scb.rd.en) ? $sformatf(
+            string rs3 = dec_to_scb.rs3.en ? (
+                !dec_to_scb.rs3.is_imm ? $sformatf(
+                    "             RS3: idx( %s%0d )\n",
+                    (dec_to_scb.rs3.val.as_r.is_bn ? "b" : "x"),
+                    dec_to_scb.rs3.val.as_r.idx
+                ) : $sformatf(
+                    "             IMM: %s, 0x%0X\n",
+                    dec_to_scb.rs3.val.as_imm.fmt.name(),
+                    dec_to_scb.rs3.val.as_imm.bits
+                )
+            ) : "";
+
+            string rd = dec_to_scb.rd.en ? $sformatf(
                     "             RD: idx( %s%0d )\n",
                     (dec_to_scb.rd.is_bn ? "b" : "x"),
                     dec_to_scb.rd.idx
@@ -493,11 +499,11 @@ package dbg_pkg;
             t_logs[dec_to_scb.tid].dec_to_scb = $sformatf({
                 "DECODE->SCB: PC: 0x%05X, (%s)\n",
                 "             EU: %s, OP: %s\n",
-                "%s", "%s", "%s", "%s", "%s", "%s", "%s"
+                "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s"
             },
                 dec_to_scb.pc, decode_riscv(dec_to_scb.instr),
                 dec_to_scb.eu_tag.name(), dec_to_scb.op_tag.name(),
-                rs1, rs2, rd, read_stall, bshfl_stall, can_issue, rejected
+                rs1, rs2, rs3, rd, read_stall, bshfl_stall, can_issue, rejected
             );
         endfunction : process_dec_to_scb
 
@@ -510,24 +516,25 @@ package dbg_pkg;
                     scb_to_rf.rs1.idx
                 ) : "";
 
-            string rs2 =
-                (scb_to_rf.rd_is_rs && scb_to_rf.rd.en) ? $sformatf(
+            string rs2 = scb_to_rf.rs2.en ? $sformatf(
                     "         RS2: idx( %s%0d ),  ",
-                    (scb_to_rf.rd.is_bn ? "b" : "x"),
-                    scb_to_rf.rd.idx
-                ) :
-                !scb_to_rf.rs2.is_imm ? $sformatf(
-                    "         RS2: idx( %s%0d ),  ",
-                    (scb_to_rf.rs2.val.as_r.is_bn ? "b" : "x"),
-                    scb_to_rf.rs2.val.as_r.idx
-                ) :
-                $sformatf(
-                    "         IMM: %s, 0x%0X,  ",
-                    scb_to_rf.rs2.val.as_imm.fmt.name(),
-                    scb_to_rf.rs2.val.as_imm.bits,
-                );
+                    (scb_to_rf.rs2.is_bn ? "b" : "x"),
+                    scb_to_rf.rs2.idx
+                ) : "";
 
-            string rd = (!scb_to_rf.rd_is_rs && scb_to_rf.rd.en) ? $sformatf(
+            string rs3 = scb_to_rf.rs3.en ? (
+                !scb_to_rf.rs3.is_imm ? $sformatf(
+                    "         RS3: idx( %s%0d ),  ",
+                    (scb_to_rf.rs3.val.as_r.is_bn ? "b" : "x"),
+                    scb_to_rf.rs3.val.as_r.idx
+                ) : $sformatf(
+                    "         IMM: %s, 0x%0X,  ",
+                    scb_to_rf.rs3.val.as_imm.fmt.name(),
+                    scb_to_rf.rs3.val.as_imm.bits
+                )
+            ) : "";
+
+            string rd = scb_to_rf.rd.en ? $sformatf(
                     "         RD: idx( %s%0d )\n",
                     (scb_to_rf.rd.is_bn ? "b" : "x"),
                     scb_to_rf.rd.idx
@@ -548,11 +555,11 @@ package dbg_pkg;
             t_logs[scb_to_rf.tid].scb_to_rf = $sformatf({
                 "SCB->RF: PC: 0x%05X, (%s)\n",
                 "         EU: %s, OP: %s\n",
-                "%s", "%s", "%s"
+                "%s", "%s", "%s", "%s"
             },
                 scb_to_rf.pc, decode_riscv(scb_to_rf.instr),
                 scb_to_rf.eu_tag.name(), scb_to_rf.op_tag.name(),
-                rs1, rs2, rd
+                rs1, rs2, rs3, rd
             );
         endfunction : process_scb_to_rf
 

@@ -42,19 +42,20 @@ INCLUDES = -I./src/ -I./cmd/ -I$(BUILD_DIR)/gen/
 CXXFLAGS = -std=c++23 -MMD -MP $(FLAGS) $(INCLUDES)
 LIBS = -ltbb
 
-## === SOURCE CDOE ===
+## === SOURCE CODE ===
 PRIMES_H := $(BUILD_DIR)/gen/primes.h
 
 CXX_SRCS := $(shell find src -type f -name "*.cpp")
 CXX_OBJS = $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(CXX_SRCS))
 
-CMD_NAMES := $(patsubst ./%,%,$(wildcard ./cmd/*.cpp))
+ALL_CMD_NAMES := $(patsubst ./%,%,$(wildcard ./cmd/*.cpp))
+
+CMD_NAMES := $(filter-out cmd/primesGen.cpp, $(ALL_CMD_NAMES))
 CMD_BINS := $(patsubst cmd/%.cpp, $(BUILD_DIR)/%$(TARGET_NAME), $(CMD_NAMES))
+CMD_OBJS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(CMD_NAMES))
 
-ALL_SRCS := $(CXX_SRCS) $(CMD_NAMES)
+ALL_SRCS := $(CXX_SRCS) $(ALL_CMD_NAMES)
 DEPS = $(patsubst %.cpp, $(BUILD_DIR)/%.d, $(ALL_SRCS))
-
-
 
 ##---------------
 ## BUILD RULES
@@ -79,12 +80,17 @@ run-%:
 
 _build_all: $(CMD_BINS) $(PRIMES_H)
 
+$(CXX_OBJS) $(CMD_OBJS): $(PRIMES_H)
+
+$(BUILD_DIR)/primesGen$(TARGET_NAME): $(BUILD_DIR)/cmd/primesGen.o
+	@mkdir -p $(dir $@)
+	@echo "[LINKING]: $@"
+	@$(CCACHE) $(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
+
 $(PRIMES_H): $(BUILD_DIR)/primesGen$(TARGET_NAME)
 	@mkdir -p $(dir $@)
 	@echo "[GEN]: Creating $@"
 	@./$(BUILD_DIR)/primesGen$(TARGET_NAME) -o $@ -n 20 -d 15
-
-$(BUILD_DIR)/tests$(TARGET_NAME): $(PRIMES_H)
 
 $(CMD_BINS): $(BUILD_DIR)/%$(TARGET_NAME): $(BUILD_DIR)/cmd/%.o $(CXX_OBJS)
 	@mkdir -p $(dir $@)
@@ -97,6 +103,8 @@ $(BUILD_DIR)/%.o: %.cpp
 	@$(CCACHE) $(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	-rm -rf $(BUILD_DIR)
+	-rm -rf $(BUILD_DIR)/cmd
+	-rm -rf $(BUILD_DIR)/src
+	-rm -rf $(BUILD_DIR)/gen
 
 -include $(DEPS)
